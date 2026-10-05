@@ -163,7 +163,50 @@ def ai_install_start(chat):
         send(chat, "Уже стоит.")
         return
     state[chat] = {"step": "aip_intro", "ip": info.get("server_ip", "")}
+    if sec_info().get("domain"):
+        # домен уже в сейфе — путешествие пройдено, продолжаем с того места
+        send(chat, "📦 Вижу в сейфе твой домен — продолжаю с того места, где остановились.")
+        ai_next(chat)
+        return
     send(chat, kb_text("text-intro"), inline([btn("🚀 Погнали", "aip:s:buy")], [btn("✖️ Отмена", "cancel")]))
+
+
+def ai_next(chat):
+    """Следующий шаг установки. Что уже лежит в сейфе — не спрашиваем."""
+    st = state.get(chat)
+    if not st:
+        send(chat, "Начни заново: 🧠 Нейронки → Установить.")
+        return
+    safe = sec_info()
+    domain = safe.get("domain")
+    if not domain:
+        st["step"] = "aip_domain"
+        send(chat, "🍺 Всё, самое долгое позади! Дальше только вставляешь сюда.\n\n"
+                   "Пришли свой домен одним сообщением, я положу его в сейф.\n"
+                   "Например: <code>mojdns.site</code>", inline([btn("✖️ Отмена", "cancel")]))
+        return
+    st["domain"] = domain
+    if not st.get("records_ok"):
+        code, out = kb("aiproxy", "check-dns", domain, st["ip"], timeout=60)
+        if code == 0:
+            st["records_ok"] = True
+            send(chat, "✅ Записи в Cloudflare на месте.")
+        else:
+            st["step"] = "aip_records"
+            send(chat, kb_text("text-records", st["ip"]))
+            send(chat, "Сделал обе записи — жми кнопку.",
+                 inline([btn("✅ Сделал, проверить", "aip:checkdns")], [btn("✖️ Отмена", "cancel")]))
+            return
+    if not safe.get("cloudflare"):
+        st["step"] = "aip_token"
+        send(chat, kb_text("text-token"))
+        send(chat, "Вставь ключ сюда, я положу его в сейф.\n\n" + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
+        return
+    send(chat, f"🔐 API-ключ Cloudflare беру из сейфа ({esc(safe['cloudflare'])}).")
+    st["step"] = "aip_client"
+    send(chat, "<b>ПОСЛЕДНИЙ ШАГ. ТВОЙ ТЕЛЕФОН</b>\n"
+               "Как его назвать? Латиницей, например <code>vasya-phone</code>. Или жми кнопку.",
+         inline([btn("Назвать phone", "aip:client:phone")], [btn("✖️ Отмена", "cancel")]))
 
 
 def ai_stage(chat, stage):
@@ -177,28 +220,16 @@ def ai_stage(chat, stage):
         send(chat, kb_text("text-cf"),
              inline([btn("✅ Домен стал Active", "aip:s:domain")], [btn("✖️ Отмена", "cancel")]))
     elif stage == "domain":
-        saved = sec_info().get("domain")
-        if saved:
-            ai_got_domain(chat, saved)
-            return
-        st["step"] = "aip_domain"
-        send(chat, "🍺 Всё, самое долгое позади! Дальше только вставляешь сюда.\n\n"
-                   "Пришли свой домен одним сообщением.\nНапример: <code>mojdns.site</code>",
-             inline([btn("✖️ Отмена", "cancel")]))
+        ai_next(chat)
 
 
 def ai_got_domain(chat, text):
-    d = text.strip().lower()
-    d = re.sub(r"^https?://", "", d).split("/")[0].rstrip(".")
-    d = re.sub(r"^dns\.", "", d)
-    if not DOMAIN_RE.match(d):
-        send(chat, "Это не похоже на домен. Пример: <code>mojdns.site</code>")
+    code, out = kb("secrets", "set-domain", text.strip(), timeout=30)
+    if code != 0:
+        send(chat, "❌ " + esc(last_line(out)))
         return
-    st = state[chat]
-    st.update(step="aip_records", domain=d)
-    send(chat, kb_text("text-records", st["ip"]))
-    send(chat, "Сделал обе записи — жми кнопку.",
-         inline([btn("✅ Сделал, проверить", "aip:checkdns")], [btn("✖️ Отмена", "cancel")]))
+    send(chat, "📦 " + esc(last_line(out)))
+    ai_next(chat)
 
 
 def ai_check_dns(chat):
@@ -210,46 +241,22 @@ def ai_check_dns(chat):
     if code != 0:
         send_pre(chat, out, "Пока не вижу записи.",
                  inline([btn("🔁 Проверить ещё раз", "aip:checkdns")], [btn("✖️ Отмена", "cancel")]))
-        send(chat, "Если только что менял NS у регистратора — подожди 10–30 минут.")
+        send(chat, "Записи обычно видны через 1–5 минут. Подожди и жми ещё раз.")
         return
-    st["step"] = "aip_token"
-    send_pre(chat, out, "✅ Записи на месте")
-    if sec_info().get("cloudflare"):
-        st["step"] = "aip_records"   # ждём выбора: сохранённый или новый
-    saved = sec_info().get("cloudflare")
-    if saved:
-        send(chat, f"У меня уже есть сохранённый ключ Cloudflare ({esc(saved)}).",
-             inline([btn("✅ Взять сохранённый", "aip:savedcf")], [btn("Пришлю новый", "aip:newcf")],
-                    [btn("✖️ Отмена", "cancel")]))
-        return
-    ai_ask_token(chat)
-
-
-def ai_ask_token(chat):
-    send(chat, kb_text("text-token"))
-    send(chat, "Вставь ключ сюда.\n\n" + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
+    st["records_ok"] = True
+    send(chat, "✅ Записи на месте.")
+    ai_next(chat)
 
 
 def ai_got_token(chat, text, msg_id):
     delete(chat, msg_id)
-    token = text.strip()
-    if len(token) < 30 or " " in token:
-        send(chat, "Это не похоже на ключ Cloudflare. Скопируй его целиком и пришли ещё раз.")
-        return
-    code, out = kb("secrets", "check-cf", env={"KB_CF_TOKEN": token}, timeout=60)
+    code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": text.strip()}, timeout=60)
     if code != 0:
-        send(chat, "🔐 Удалила из чата.\n❌ " + esc(last_line(out, "Ключ не подошёл")) +
-             "\nПришли ключ ещё раз.")
+        send(chat, "🔐 Сообщение удалила.\n❌ " + esc(last_line(out, "Ключ не подошёл")) +
+             "\nСкопируй ключ целиком и вставь ещё раз.")
         return
-    st = state[chat]
-    st.update(step="aip_client", token=token)
-    ai_ask_client(chat, "🔐 Ключ проверен и удалён из чата.")
-
-
-def ai_ask_client(chat, head):
-    send(chat, head + "\n\n<b>ЭТАП 5. ТВОЙ ТЕЛЕФОН</b>\n"
-               "Как его назвать? Латиницей, например <code>vasya-phone</code>. Или жми кнопку.",
-         inline([btn("Назвать phone", "aip:client:phone")], [btn("✖️ Отмена", "cancel")]))
+    send(chat, "🔐 Сообщение удалила, ключ проверен и лежит в сейфе.")
+    ai_next(chat)
 
 
 def ai_got_client(chat, name):
@@ -265,8 +272,6 @@ def ai_got_client(chat, name):
     def job():
         os.makedirs(LOG_DIR, exist_ok=True)
         env = {"KB_DOMAIN": st["domain"], "KB_CLIENT": name, "KB_SERVER_IP": st["ip"]}
-        if st.get("token"):
-            env["KB_CF_TOKEN"] = st["token"]
         code, out = kb("aiproxy", "install", timeout=1200, env=env)
         with open(os.path.join(LOG_DIR, "aiproxy-install.log"), "w") as f:
             f.write(out)
@@ -298,16 +303,6 @@ def ai_callback(chat, data):
         ai_stage(chat, data.split(":", 2)[2])
     elif data == "aip:checkdns":
         ai_check_dns(chat)
-    elif data == "aip:savedcf":
-        st = state.get(chat)
-        if st and st.get("step") == "aip_records":
-            st["step"] = "aip_client"
-            ai_ask_client(chat, "🔐 Беру сохранённый ключ.")
-    elif data == "aip:newcf":
-        st = state.get(chat)
-        if st and st.get("step") == "aip_records":
-            st["step"] = "aip_token"
-            ai_ask_token(chat)
     elif data.startswith("aip:client:"):
         ai_got_client(chat, data.split(":", 2)[2])
     elif data == "aip:add":
