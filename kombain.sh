@@ -42,6 +42,8 @@ KB_SRC="$SELF_DIR"
 
 # shellcheck source=lib/common.sh
 . "$KB_SRC/lib/common.sh"
+# shellcheck source=modules/secrets.sh
+. "$KB_SRC/modules/secrets.sh"
 # shellcheck source=modules/aiproxy.sh
 . "$KB_SRC/modules/aiproxy.sh"
 # shellcheck source=modules/bot.sh
@@ -53,6 +55,7 @@ if [ "${1:-}" = "cli" ]; then
   mod="${1:-}"; shift || true
   case "$mod" in
     aiproxy) aip_cli "$@"; exit $? ;;
+    secrets) sec_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi

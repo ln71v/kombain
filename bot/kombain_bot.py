@@ -22,8 +22,8 @@ KB = os.path.join(KB_SRC, "kombain.sh")
 LOG_DIR = "/opt/kombain/logs"
 API = f"https://api.telegram.org/bot{TOKEN}"
 
-B_AI, B_SERVER, B_HELP = "🧠 Нейронки", "📊 Сервер", "❓ Помощь"
-MAIN_KB = {"keyboard": [[{"text": B_AI}], [{"text": B_SERVER}, {"text": B_HELP}]],
+B_AI, B_SERVER, B_HELP, B_KEYS = "🧠 Нейронки", "📊 Сервер", "❓ Помощь", "🔑 Ключи"
+MAIN_KB = {"keyboard": [[{"text": B_AI}], [{"text": B_SERVER}, {"text": B_KEYS}, {"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
 CLIENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -69,6 +69,12 @@ def delete(chat, msg_id):
         call("deleteMessage", chat_id=chat, message_id=msg_id)
     except Exception:
         pass
+
+
+def last_line(out, default=""):
+    """Последняя строка вывода без значков ✔ ✖ ! из терминала."""
+    line = out.strip().splitlines()[-1] if out.strip() else default
+    return line.lstrip("✔✖! ").strip()
 
 
 def btn(text, data):
@@ -204,6 +210,18 @@ def ai_check_dns(chat):
         return
     st["step"] = "aip_token"
     send_pre(chat, out, "✅ Записи на месте")
+    if sec_info().get("cloudflare"):
+        st["step"] = "aip_records"   # ждём выбора: сохранённый или новый
+    saved = sec_info().get("cloudflare")
+    if saved:
+        send(chat, f"У меня уже есть сохранённый ключ Cloudflare ({esc(saved)}).",
+             inline([btn("✅ Взять сохранённый", "aip:savedcf")], [btn("Пришлю новый", "aip:newcf")],
+                    [btn("✖️ Отмена", "cancel")]))
+        return
+    ai_ask_token(chat)
+
+
+def ai_ask_token(chat):
     send(chat, kb_text("text-token"))
     send(chat, "Пришли ключ сообщением. Я его сразу удалю из чата.", inline([btn("✖️ Отмена", "cancel")]))
 
@@ -214,9 +232,18 @@ def ai_got_token(chat, text, msg_id):
     if len(token) < 30 or " " in token:
         send(chat, "Это не похоже на ключ Cloudflare. Скопируй его целиком и пришли ещё раз.")
         return
+    code, out = kb("secrets", "check-cf", env={"KB_CF_TOKEN": token}, timeout=60)
+    if code != 0:
+        send(chat, "🔐 Удалила из чата.\n❌ " + esc(last_line(out, "Ключ не подошёл")) +
+             "\nПришли ключ ещё раз.")
+        return
     st = state[chat]
     st.update(step="aip_client", token=token)
-    send(chat, "🔐 Ключ получен и удалён из чата.\n\n<b>ЭТАП 5. ТВОЙ ТЕЛЕФОН</b>\n"
+    ai_ask_client(chat, "🔐 Ключ проверен и удалён из чата.")
+
+
+def ai_ask_client(chat, head):
+    send(chat, head + "\n\n<b>ЭТАП 5. ТВОЙ ТЕЛЕФОН</b>\n"
                "Как его назвать? Латиницей, например <code>vasya-phone</code>. Или жми кнопку.",
          inline([btn("Назвать phone", "aip:client:phone")], [btn("✖️ Отмена", "cancel")]))
 
@@ -227,15 +254,16 @@ def ai_got_client(chat, name):
         send(chat, "Только маленькие латинские буквы, цифры и дефис. Например <code>vasya-phone</code>.")
         return
     st = state.pop(chat, None)
-    if not st or "token" not in st:
+    if not st or st.get("step") != "aip_client":
         send(chat, "Начни заново: 🧠 Нейронки → Установить.")
         return
 
     def job():
         os.makedirs(LOG_DIR, exist_ok=True)
-        code, out = kb("aiproxy", "install", timeout=1200, env={
-            "KB_DOMAIN": st["domain"], "KB_CF_TOKEN": st["token"],
-            "KB_CLIENT": name, "KB_SERVER_IP": st["ip"]})
+        env = {"KB_DOMAIN": st["domain"], "KB_CLIENT": name, "KB_SERVER_IP": st["ip"]}
+        if st.get("token"):
+            env["KB_CF_TOKEN"] = st["token"]
+        code, out = kb("aiproxy", "install", timeout=1200, env=env)
         with open(os.path.join(LOG_DIR, "aiproxy-install.log"), "w") as f:
             f.write(out)
         if code != 0:
@@ -266,6 +294,16 @@ def ai_callback(chat, data):
         ai_stage(chat, data.split(":", 2)[2])
     elif data == "aip:checkdns":
         ai_check_dns(chat)
+    elif data == "aip:savedcf":
+        st = state.get(chat)
+        if st and st.get("step") == "aip_records":
+            st["step"] = "aip_client"
+            ai_ask_client(chat, "🔐 Беру сохранённый ключ.")
+    elif data == "aip:newcf":
+        st = state.get(chat)
+        if st and st.get("step") == "aip_records":
+            st["step"] = "aip_token"
+            ai_ask_token(chat)
     elif data.startswith("aip:client:"):
         ai_got_client(chat, data.split(":", 2)[2])
     elif data == "aip:add":
@@ -303,6 +341,50 @@ def ai_callback(chat, data):
         run_long(chat, "Удаляю…", lambda: send_pre(chat, kb(*args)[1], "🗑 Готово"))
 
 
+# ───────────────────────── ключи ─────────────────────────
+def sec_info():
+    code, out = kb("secrets", "info", timeout=30)
+    try:
+        return json.loads(out.splitlines()[-1])
+    except Exception:
+        return {}
+
+
+def keys_screen(chat):
+    i = sec_info()
+    text = ("🔑 <b>Ключи</b>\n"
+            "Вводишь один раз — дальше все модули берут их сами.\n\n"
+            f"Cloudflare: {esc(i.get('cloudflare') or 'не сохранён')}\n"
+            f"Токен бота: {esc(i.get('bot') or '—')}\n"
+            f"Домен: {esc(i.get('domain') or 'не задан')}\n\n")
+    _, where = kb("secrets", "where", timeout=30)
+    send(chat, text + esc(where), inline(
+        [btn("🔄 Заменить ключ Cloudflare", "sec:cf")],
+        [btn("🔄 Заменить токен бота", "sec:bot")]))
+
+
+def sec_callback(chat, data):
+    if data == "sec:cf":
+        state[chat] = {"step": "sec_cf"}
+        send(chat, "Пришли новый ключ Cloudflare. Я его проверю и удалю из чата.",
+             inline([btn("✖️ Отмена", "cancel")]))
+    elif data == "sec:bot":
+        state[chat] = {"step": "sec_bot"}
+        send(chat, "Пришли новый токен бота от @BotFather. Я его проверю, удалю из чата и перезапущусь.",
+             inline([btn("✖️ Отмена", "cancel")]))
+
+
+def sec_got(chat, step, text, msg_id):
+    delete(chat, msg_id)
+    state.pop(chat, None)
+    t = text.strip()
+    if step == "sec_cf":
+        code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": t}, timeout=60)
+    else:
+        code, out = kb("secrets", "set-bot", env={"KB_BOT_TOKEN": t}, timeout=60)
+    send(chat, "🔐 Удалила из чата.\n" + ("✅ " if code == 0 else "❌ ") + esc(last_line(out)))
+
+
 # ───────────────────────── общие экраны ─────────────────────────
 def server_screen(chat):
     cmd = ("echo \"IP: $(curl -4 -fs --max-time 5 https://api.ipify.org)\"; "
@@ -316,7 +398,8 @@ def server_screen(chat):
 
 HELP = ("🤖 <b>Пульт Комбайна</b>\n\n"
         "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS. Установка, устройства, состояние.\n"
-        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
+        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n"
+        "🔑 <b>Ключи</b> — что сохранено, где брать, заменить.\n\n"
         "Скоро здесь же: VLESS, AmneziaWG, WARP, Telegram-прокси.\n\n"
         "Отменить любой шаг — /cancel.")
 
@@ -339,12 +422,18 @@ def on_message(m):
     if text == B_SERVER:
         server_screen(chat)
         return
+    if text == B_KEYS:
+        state.pop(chat, None)
+        keys_screen(chat)
+        return
     if text == B_HELP:
         send(chat, HELP, MAIN_KB)
         return
 
     st = state.get(chat, {}).get("step")
-    if st == "aip_domain":
+    if st in ("sec_cf", "sec_bot"):
+        sec_got(chat, st, text, m["message_id"])
+    elif st == "aip_domain":
         ai_got_domain(chat, text)
     elif st == "aip_token":
         ai_got_token(chat, text, m["message_id"])
@@ -378,6 +467,8 @@ def on_callback(q):
         send(chat, "Отменил.", MAIN_KB)
     elif data.startswith("aip:"):
         ai_callback(chat, data)
+    elif data.startswith("sec:"):
+        sec_callback(chat, data)
 
 
 def main():

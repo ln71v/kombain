@@ -11,7 +11,7 @@
 AIP_DIR="$KB_HOME/aiproxy"
 AIP_ENV="$AIP_DIR/env"
 AIP_LE="$AIP_DIR/letsencrypt"
-AIP_SECRETS="$AIP_DIR/secrets"
+AIP_SECRETS="$KB_SECRETS"   # общий для всех модулей, см. secrets.sh
 AIP_AGH="$AIP_DIR/adguard"
 AIP_NGX="$AIP_DIR/nginx"
 AIP_API="http://127.0.0.1:3000/control"
@@ -229,10 +229,8 @@ aip_check_ports() {
 
 aip_get_cert() {
   step "Получаю сертификат для $DNS_HOST и *.$DNS_HOST"
-  mkdir -p "$AIP_LE" "$AIP_SECRETS"
-  chmod 700 "$AIP_SECRETS"
-  printf 'dns_cloudflare_api_token = %s\n' "$CF_TOKEN" >"$AIP_SECRETS/cloudflare.ini"
-  chmod 600 "$AIP_SECRETS/cloudflare.ini"
+  mkdir -p "$AIP_LE"
+  sec_cf_save "$CF_TOKEN"
   if docker run --rm \
       -v "$AIP_LE:/etc/letsencrypt" \
       -v "$AIP_SECRETS:/secrets:ro" \
@@ -521,8 +519,16 @@ aip_install() {
 
   step "Этап 4: ключ"
   aip_explain_token
-  CF_TOKEN=$(ask_secret "Вставь ключ (ввод не видно, это нормально)")
-  [ -z "$CF_TOKEN" ] && { err "Ключ пустой"; return 1; }
+  CF_TOKEN=$(sec_cf_token)
+  if [ -n "$CF_TOKEN" ] && confirm "Есть сохранённый ключ $(sec_mask "$CF_TOKEN"). Взять его?"; then
+    :
+  else
+    while true; do
+      CF_TOKEN=$(ask_secret "Вставь ключ (ввод не видно, это нормально)")
+      sec_cf_verify "$CF_TOKEN" && { ok "Cloudflare ключ принял"; break; }
+      warn "Cloudflare этот ключ не принимает. Скопируй целиком или сделай новый."
+    done
+  fi
 
   step "Этап 5: твой телефон"
   say "Придумай имя для своего телефона латиницей: например vasya-phone."
@@ -559,6 +565,7 @@ aip_install_core() {
   aip_write_nginx
   aip_start_nginx || return 1
   aip_save_env
+  sec_domain_save "$DOMAIN"
   unset CF_TOKEN
 
   fw_register aiproxy "443/tcp 53/tcp 53/udp 853/tcp 853/udp"
@@ -708,8 +715,9 @@ aip_cli() {
     check-dns)    ensure_pkgs dnsutils >/dev/null 2>&1; aip_dns_ok "dns.${1:?домен}" "${2:-$(server_ip)}" ;;
     install)
       aip_installed && { err "Уже установлено"; return 1; }
-      DOMAIN="${KB_DOMAIN:?}"; CF_TOKEN="${KB_CF_TOKEN:?}"; FIRST_CLIENT="${KB_CLIENT:-phone}"
+      DOMAIN="${KB_DOMAIN:?}"; CF_TOKEN="${KB_CF_TOKEN:-$(sec_cf_token)}"; FIRST_CLIENT="${KB_CLIENT:-phone}"
       SERVER_IP="${KB_SERVER_IP:-$(server_ip)}"
+      [ -n "$CF_TOKEN" ] || { err "Нет ключа Cloudflare"; return 1; }
       aip_valid_client "$FIRST_CLIENT" || { err "Плохое имя устройства"; return 1; }
       aip_install_core ;;
     status)         aip_status ;;
