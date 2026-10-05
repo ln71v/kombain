@@ -22,7 +22,7 @@ KB = os.path.join(KB_SRC, "kombain.sh")
 LOG_DIR = "/opt/kombain/logs"
 API = f"https://api.telegram.org/bot{TOKEN}"
 
-B_AI, B_SERVER, B_HELP, B_KEYS = "🧠 Нейронки", "📊 Сервер", "❓ Помощь", "🔑 Ключи"
+B_AI, B_SERVER, B_HELP, B_KEYS = "🧠 Нейронки", "📊 Сервер", "❓ Помощь", "🔐 Сейф"
 MAIN_KB = {"keyboard": [[{"text": B_AI}], [{"text": B_SERVER}, {"text": B_KEYS}, {"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
@@ -177,6 +177,10 @@ def ai_stage(chat, stage):
         send(chat, kb_text("text-cf"),
              inline([btn("✅ Домен стал Active", "aip:s:domain")], [btn("✖️ Отмена", "cancel")]))
     elif stage == "domain":
+        saved = sec_info().get("domain")
+        if saved:
+            ai_got_domain(chat, saved)
+            return
         st["step"] = "aip_domain"
         send(chat, "🍺 Всё, самое долгое позади! Дальше только вставляешь сюда.\n\n"
                    "Пришли свой домен одним сообщением.\nНапример: <code>mojdns.site</code>",
@@ -223,7 +227,7 @@ def ai_check_dns(chat):
 
 def ai_ask_token(chat):
     send(chat, kb_text("text-token"))
-    send(chat, "Пришли ключ сообщением. Я его сразу удалю из чата.", inline([btn("✖️ Отмена", "cancel")]))
+    send(chat, "Вставь ключ сюда.\n\n" + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
 
 
 def ai_got_token(chat, text, msg_id):
@@ -350,39 +354,55 @@ def sec_info():
         return {}
 
 
+SAFE_WARN = ("⚠️ Как только пришлёшь — я сразу удалю твоё сообщение из чата. "
+             "Не пугайся, что оно пропало: так надо, чтобы ключ не висел в переписке. "
+             "Он уже лежит в сейфе.")
+
+
 def keys_screen(chat):
     i = sec_info()
-    text = ("🔑 <b>Ключи</b>\n"
-            "Вводишь один раз — дальше все модули берут их сами.\n\n"
-            f"Cloudflare: {esc(i.get('cloudflare') or 'не сохранён')}\n"
-            f"Токен бота: {esc(i.get('bot') or '—')}\n"
-            f"Домен: {esc(i.get('domain') or 'не задан')}\n\n")
+    mark = lambda v: f"✅ {esc(v)}" if v else "⬜ пусто"
+    text = ("🔐 <b>Сейф</b>\n"
+            "Кладёшь сюда ключи один раз — дальше я беру их сам, когда что-то ставлю.\n\n"
+            f"1. Ключ Cloudflare — {mark(i.get('cloudflare'))}\n"
+            f"2. Домен — {mark(i.get('domain'))}\n"
+            f"3. Токен бота — {mark(i.get('bot'))}\n\n")
     _, where = kb("secrets", "where", timeout=30)
     send(chat, text + esc(where), inline(
-        [btn("🔄 Заменить ключ Cloudflare", "sec:cf")],
-        [btn("🔄 Заменить токен бота", "sec:bot")]))
+        [btn("1️⃣ Положить ключ Cloudflare", "sec:cf")],
+        [btn("2️⃣ Положить домен", "sec:domain")],
+        [btn("3️⃣ Заменить токен бота", "sec:bot")]))
 
 
 def sec_callback(chat, data):
     if data == "sec:cf":
         state[chat] = {"step": "sec_cf"}
-        send(chat, "Пришли новый ключ Cloudflare. Я его проверю и удалю из чата.",
+        send(chat, "Вставь сюда <b>ключ Cloudflare</b> — длинную строку, которую скопировал после «Create Token».\n\n"
+             + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
+    elif data == "sec:domain":
+        state[chat] = {"step": "sec_domain"}
+        send(chat, "Вставь сюда <b>свой домен</b>, например <code>mojdns.site</code>.",
              inline([btn("✖️ Отмена", "cancel")]))
     elif data == "sec:bot":
         state[chat] = {"step": "sec_bot"}
-        send(chat, "Пришли новый токен бота от @BotFather. Я его проверю, удалю из чата и перезапущусь.",
-             inline([btn("✖️ Отмена", "cancel")]))
+        send(chat, "Вставь сюда <b>новый токен бота</b> от @BotFather. После этого я перезапущусь.\n\n"
+             + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
 
 
 def sec_got(chat, step, text, msg_id):
-    delete(chat, msg_id)
     state.pop(chat, None)
     t = text.strip()
+    if step == "sec_domain":
+        code, out = kb("secrets", "set-domain", t, timeout=30)
+        send(chat, ("✅ " if code == 0 else "❌ ") + esc(last_line(out)))
+        return
+    delete(chat, msg_id)
     if step == "sec_cf":
         code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": t}, timeout=60)
     else:
         code, out = kb("secrets", "set-bot", env={"KB_BOT_TOKEN": t}, timeout=60)
-    send(chat, "🔐 Удалила из чата.\n" + ("✅ " if code == 0 else "❌ ") + esc(last_line(out)))
+    send(chat, "🔐 Сообщение удалила, ключ в сейфе.\n" if code == 0 else "🔐 Сообщение удалила.\n")
+    send(chat, ("✅ " if code == 0 else "❌ ") + esc(last_line(out)))
 
 
 # ───────────────────────── общие экраны ─────────────────────────
@@ -399,7 +419,7 @@ def server_screen(chat):
 HELP = ("🤖 <b>Пульт Комбайна</b>\n\n"
         "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS. Установка, устройства, состояние.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n"
-        "🔑 <b>Ключи</b> — что сохранено, где брать, заменить.\n\n"
+        "🔐 <b>Сейф</b> — положи сюда ключи один раз, дальше я беру их сам.\n\n"
         "Скоро здесь же: VLESS, AmneziaWG, WARP, Telegram-прокси.\n\n"
         "Отменить любой шаг — /cancel.")
 
@@ -431,7 +451,7 @@ def on_message(m):
         return
 
     st = state.get(chat, {}).get("step")
-    if st in ("sec_cf", "sec_bot"):
+    if st in ("sec_cf", "sec_bot", "sec_domain"):
         sec_got(chat, st, text, m["message_id"])
     elif st == "aip_domain":
         ai_got_domain(chat, text)

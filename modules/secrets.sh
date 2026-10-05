@@ -63,6 +63,11 @@ sec_cli() {
       ensure_pkgs curl jq >/dev/null 2>&1
       sec_cf_verify "${KB_CF_TOKEN:?}" || { err "Cloudflare этот ключ не принимает."; return 1; }
       sec_cf_save "$KB_CF_TOKEN" && ok "Ключ Cloudflare сохранён" ;;
+    set-domain)
+      local d="${1:-}"
+      d=$(printf '%s' "$d" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#\.$##; s#^dns\.##')
+      [[ "$d" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]] || { err "Это не похоже на домен. Пример: mojdns.site"; return 1; }
+      sec_domain_save "$d" && ok "Домен $d в сейфе" ;;
     set-bot)
       local t="${KB_BOT_TOKEN:?}" name
       name=$(bot_check_token "$t")
