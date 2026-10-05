@@ -255,11 +255,36 @@ aip_configure_adguard() {
   aip_api POST /tls/configure "$tls" >/dev/null || { err "Не включился шифрованный DNS"; return 1; }
   ok "Шифрованный DNS (DoH/DoT/DoQ) включён"
 
-  # IPv6-ответы выключаем, иначе часть трафика пойдёт мимо сервера
-  aip_api POST /dns_config '{"disable_ipv6":true}' >/dev/null && ok "IPv6-ответы выключены"
+  aip_tune_dns
 
   aip_set_clients "$FIRST_CLIENT" || return 1
   aip_sync_rewrites
+}
+
+# Настройки DNS — ставятся сами, юзер не выбирает
+aip_tune_dns() {
+  local cfg
+  cfg=$(jq -nc '{
+    upstream_dns: ["https://dns.cloudflare.com/dns-query", "https://dns.google/dns-query", "https://dns.quad9.net/dns-query"],
+    bootstrap_dns: ["1.1.1.1", "8.8.8.8", "9.9.9.9"],
+    fallback_dns: ["1.1.1.1", "8.8.8.8"],
+    upstream_mode: "parallel",
+    cache_enabled: true, cache_size: 16777216, cache_optimistic: true,
+    ratelimit: 100,
+    dnssec_enabled: true,
+    edns_cs_enabled: false,
+    disable_ipv6: true
+  }')
+  # disable_ipv6: иначе часть трафика нейронок пойдёт мимо сервера по IPv6
+  aip_api POST /dns_config "$cfg" >/dev/null || { err "Не применились настройки DNS"; return 1; }
+  ok "DNS: Cloudflare + Google + Quad9 по шифрованному каналу, кэш, DNSSEC, без IPv6"
+
+  aip_api PUT /querylog/config/update \
+    '{"enabled":true,"interval":86400000,"anonymize_client_ip":false,"ignored":[],"ignored_enabled":false}' >/dev/null \
+    && ok "Журнал запросов: хранится 1 сутки"
+  aip_api PUT /stats/config/update \
+    '{"enabled":true,"interval":604800000,"ignored":[],"ignored_enabled":false}' >/dev/null \
+    && ok "Статистика: за 7 дней"
 }
 
 aip_set_clients() {
