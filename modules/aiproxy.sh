@@ -287,6 +287,30 @@ aip_tune_dns() {
     && ok "Статистика: за 7 дней"
 }
 
+# Ходит ли устройство через сервер: последние запросы из журнала
+aip_check_client() {
+  local c="$1" log total ai
+  log=$(aip_api GET "/querylog?limit=1000" | jq -c --arg c "$c" '[.data[]? | select(.client_id == $c)]') \
+    || { err "Не смогла прочитать журнал"; return 1; }
+  total=$(jq 'length' <<<"$log")
+  if [ "$total" -eq 0 ]; then
+    err "От «$c» за последние сутки ни одного запроса."
+    say "Значит, DNS на устройстве не настроен или настроен с ошибкой в имени."
+    say "Проверь адрес в настройках: «Как подключить» → $c."
+    return 0
+  fi
+  ai=$(jq '[.[] | select(.reason == "Rewrite" or .reason == "RewriteEtcHosts" or .reason == "RewriteRule")] | length' <<<"$log")
+  ok "«$c» ходит через сервер: $total запросов в последних записях журнала"
+  if [ "$ai" -gt 0 ]; then
+    ok "Нейронки идут через сервер ($ai запросов)"
+  else
+    say "Нейронок пока не было — открой chatgpt.com и проверь ещё раз."
+  fi
+  say ""
+  say "Последние 15 (время московское):"
+  jq -r '.[:15][] | "\((try (.time | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 + 10800 | strftime("%H:%M:%S")) catch .time[11:19]))  \(.question.name)\(if (.reason|startswith("Rewrite")) then "  ← нейронка" else "" end)"' <<<"$log"
+}
+
 aip_set_clients() {
   # aip_set_clients id1 [id2...] — добавляет к уже разрешённым
   local cur new
@@ -636,6 +660,7 @@ aip_cli() {
       aip_valid_client "${1:-}" || { err "Только маленькие латинские буквы, цифры и дефис"; return 1; }
       aip_set_clients "$1" ;;
     howto)          aip_installed || return 1; aip_show_howto "${1:?имя}" ;;
+    check-client)   aip_installed || return 1; aip_load_env; aip_check_client "${1:?имя}" ;;
     remove)         aip_installed || return 1; aip_remove_core "$([ "${1:-}" = "--purge" ] && echo 1 || echo 0)" ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
   esac

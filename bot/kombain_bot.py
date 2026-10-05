@@ -138,6 +138,7 @@ def ai_screen(chat):
             f"Устройства ({len(clients)}): {esc(', '.join(clients)) or 'нет'}")
     send(chat, text, inline(
         [btn("➕ Добавить устройство", "aip:add"), btn("📲 Как подключить", "aip:howto")],
+        [btn("🔍 Проверить устройство", "aip:check")],
         [btn("📊 Состояние", "aip:status"), btn("📜 Логи", "aip:logs")],
         [btn("🔄 Обновить список нейронок", "aip:upd")],
         [btn("♻️ Перезапустить", "aip:restart"), btn("🗑 Удалить", "aip:rm")],
@@ -232,13 +233,13 @@ def ai_got_client(chat, name):
     run_long(chat, "Ставлю AdGuard и прокси. Это 2–5 минут, я напишу.", job)
 
 
-def ai_howto_pick(chat):
+def ai_pick_client(chat, prefix):
     clients = aip_info().get("clients") or []
     if not clients:
         send(chat, "Устройств нет. Добавь: ➕ Добавить устройство.")
         return
-    rows = [[btn(c, f"aip:how:{c}")] for c in clients[:30]]
-    send(chat, "Для какого устройства?", {"inline_keyboard": rows})
+    rows = [[btn(c, f"{prefix}{c}")] for c in clients[:30]]
+    send(chat, "Какое устройство?", {"inline_keyboard": rows})
 
 
 def ai_callback(chat, data):
@@ -253,7 +254,12 @@ def ai_callback(chat, data):
         send(chat, "Как назвать новое устройство? Латиницей, например <code>mama-phone</code>.",
              inline([btn("✖️ Отмена", "cancel")]))
     elif data == "aip:howto":
-        ai_howto_pick(chat)
+        ai_pick_client(chat, "aip:how:")
+    elif data == "aip:check":
+        ai_pick_client(chat, "aip:chk:")
+    elif data.startswith("aip:chk:"):
+        _, out = kb("aiproxy", "check-client", data.split(":", 2)[2], timeout=60)
+        send_pre(chat, out, "🔍 Проверка устройства")
     elif data.startswith("aip:how:"):
         _, out = kb("aiproxy", "howto", data.split(":", 2)[2], timeout=60)
         send_pre(chat, out, "📲 Как подключить")
