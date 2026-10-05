@@ -157,7 +157,7 @@ def ai_install_start(chat):
         send(chat, "Уже стоит.")
         return
     state[chat] = {"step": "aip_intro", "ip": info.get("server_ip", "")}
-    send(chat, kb_text("text-intro"), inline([btn("🚀 Поехали", "aip:s:buy")], [btn("✖️ Отмена", "cancel")]))
+    send(chat, kb_text("text-intro"), inline([btn("🚀 Погнали", "aip:s:buy")], [btn("✖️ Отмена", "cancel")]))
 
 
 def ai_stage(chat, stage):
@@ -172,7 +172,8 @@ def ai_stage(chat, stage):
              inline([btn("✅ Домен стал Active", "aip:s:domain")], [btn("✖️ Отмена", "cancel")]))
     elif stage == "domain":
         st["step"] = "aip_domain"
-        send(chat, "Отлично! Пришли свой домен одним сообщением.\nНапример: <code>mojdns.site</code>",
+        send(chat, "🍺 Всё, самое долгое позади! Дальше только вставляешь сюда.\n\n"
+                   "Пришли свой домен одним сообщением.\nНапример: <code>mojdns.site</code>",
              inline([btn("✖️ Отмена", "cancel")]))
 
 
