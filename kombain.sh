@@ -44,6 +44,18 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/lib/common.sh"
 # shellcheck source=modules/aiproxy.sh
 . "$KB_SRC/modules/aiproxy.sh"
+# shellcheck source=modules/bot.sh
+. "$KB_SRC/modules/bot.sh"
+
+# Режим для бота: kombain cli <модуль> <команда> [аргументы]
+if [ "${1:-}" = "cli" ]; then
+  shift
+  mod="${1:-}"; shift || true
+  case "$mod" in
+    aiproxy) aip_cli "$@"; exit $? ;;
+    *) err "Неизвестный модуль: $mod"; exit 2 ;;
+  esac
+fi
 
 soon() { warn "Этот пункт ещё в работе. Следи за обновлениями: kombain --update"; }
 
@@ -54,19 +66,20 @@ main_menu() {
 ${C_BOLD}${C_CYAN}╔══════════════ КОМБАЙН ══════════════╗${C_RESET}
  IP сервера: $(server_ip)
 
- 1) Прокси для нейронок (AdGuard + nginx)
- 2) VLESS Reality + сайт-заглушка      ${C_YELLOW}[скоро]${C_RESET}
- 3) AmneziaWG                          ${C_YELLOW}[скоро]${C_RESET}
- 4) WARP                               ${C_YELLOW}[скоро]${C_RESET}
- 5) Telegram-прокси                    ${C_YELLOW}[скоро]${C_RESET}
- 6) Бот                                ${C_YELLOW}[скоро]${C_RESET}
+ 1) Бот — управлять всем из Telegram
+ 2) Прокси для нейронок (AdGuard + nginx)
+ 3) VLESS Reality + сайт-заглушка      ${C_YELLOW}[скоро]${C_RESET}
+ 4) AmneziaWG                          ${C_YELLOW}[скоро]${C_RESET}
+ 5) WARP                               ${C_YELLOW}[скоро]${C_RESET}
+ 6) Telegram-прокси                    ${C_YELLOW}[скоро]${C_RESET}
 
  9) Обновить Комбайн
  0) Выход
 EOF
     case "$(ask "Выбор")" in
-      1) aip_menu ;;
-      2|3|4|5|6) soon ;;
+      1) bot_menu ;;
+      2) aip_menu ;;
+      3|4|5|6) soon ;;
       9) exec "$KB_SRC/kombain.sh" --update ;;
       0) exit 0 ;;
       *) warn "Нет такого пункта" ;;

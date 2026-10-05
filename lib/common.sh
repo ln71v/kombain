@@ -4,12 +4,13 @@
 KB_HOME="/opt/kombain"
 KB_BACKUP="$KB_HOME/backup"
 
-C_RESET=$'\e[0m'
-C_RED=$'\e[31m'
-C_GREEN=$'\e[32m'
-C_YELLOW=$'\e[33m'
-C_CYAN=$'\e[36m'
-C_BOLD=$'\e[1m'
+if [ -t 1 ]; then
+  C_RESET=$'\e[0m'; C_RED=$'\e[31m'; C_GREEN=$'\e[32m'
+  C_YELLOW=$'\e[33m'; C_CYAN=$'\e[36m'; C_BOLD=$'\e[1m'
+else
+  # без цвета, когда вывод читает бот
+  C_RESET=""; C_RED=""; C_GREEN=""; C_YELLOW=""; C_CYAN=""; C_BOLD=""
+fi
 
 say()  { printf '%s\n' "$*"; }
 ok()   { printf '%s✔ %s%s\n' "$C_GREEN" "$*" "$C_RESET"; }
@@ -121,4 +122,63 @@ backup_file() {
 
 gen_password() {
   openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16
+}
+
+# ───────────────────────── файрвол ─────────────────────────
+# Каждый модуль регистрирует свои порты, fw_apply открывает их и SSH,
+# остальное входящее закрывает. Чужие уже работающие программы не ломаем:
+# их порты тоже оставляем открытыми и предупреждаем.
+
+KB_FW_DIR="$KB_HOME/fw.d"
+
+fw_register()   { mkdir -p "$KB_FW_DIR"; printf '%s\n' $2 >"$KB_FW_DIR/$1"; }
+
+fw_unregister() {
+  local f="$KB_FW_DIR/$1" r rules
+  [ -f "$f" ] || return 0
+  rules=$(cat "$f")
+  rm -f "$f"
+  command -v ufw >/dev/null 2>&1 || return 0
+  while IFS= read -r r; do
+    [ -z "$r" ] && continue
+    cat "$KB_FW_DIR"/* 2>/dev/null | grep -qxF "$r" && continue   # нужен другому модулю
+    ufw delete allow "$r" >/dev/null 2>&1
+  done <<<"$rules"
+}
+
+# Порты, на которых слушает sshd
+fw_ssh_ports() {
+  ss -H -ltnp 2>/dev/null | awk '/"sshd"/ {n=split($4,a,":"); print a[n]}' | sort -u
+}
+
+# Публичные порты, которые уже кто-то слушает: 443/tcp ...
+fw_listening() {
+  ss -H -ltun 2>/dev/null | awk '{
+    proto=$1; addr=$5; n=split(addr,a,":"); port=a[n]; host=substr(addr,1,length(addr)-length(port)-1)
+    if (host ~ /^(127\.|\[::1\]|::1$)/) next
+    if (proto=="tcp" && $2!="LISTEN") next
+    print port "/" proto }' | sort -u
+}
+
+fw_apply() {
+  ensure_pkgs ufw || return 1
+  step "Файрвол: открываю только нужное"
+  local want=() p extra=()
+  for p in $(fw_ssh_ports); do want+=("$p/tcp"); done
+  [ ${#want[@]} -eq 0 ] && want+=("22/tcp")   # sshd не нашли — 22 не закрываем
+  if ls "$KB_FW_DIR"/* >/dev/null 2>&1; then
+    while IFS= read -r p; do [ -n "$p" ] && want+=("$p"); done < <(cat "$KB_FW_DIR"/*)
+  fi
+  for p in $(fw_listening); do
+    printf '%s\n' "${want[@]}" | grep -qxF "$p" || extra+=("$p")
+  done
+
+  ufw default deny incoming >/dev/null
+  ufw default allow outgoing >/dev/null
+  for p in "${want[@]}" "${extra[@]}"; do ufw allow "$p" >/dev/null; done
+  ufw --force enable >/dev/null && ok "Файрвол включён. Открыто: $(printf '%s ' "${want[@]}")"
+  if [ ${#extra[@]} -gt 0 ]; then
+    warn "Оставила открытыми порты других программ: ${extra[*]}"
+    warn "Не нужны — закрой: ufw delete allow <порт>"
+  fi
 }
