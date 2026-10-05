@@ -36,7 +36,8 @@ kb_fetch() {
 SELF_DIR=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd)
 if [ "${1:-}" = "--update" ] || [ ! -f "$SELF_DIR/lib/common.sh" ]; then
   kb_fetch
-  exec "$KB_SRC/kombain.sh" --no-fetch
+  [ "${1:-}" = "--update" ] && shift
+  exec "$KB_SRC/kombain.sh" "$@"
 fi
 KB_SRC="$SELF_DIR"
 
@@ -56,6 +57,7 @@ if [ "${1:-}" = "cli" ]; then
   case "$mod" in
     aiproxy) aip_cli "$@"; exit $? ;;
     secrets) sec_cli "$@"; exit $? ;;
+    bot)     bot_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi
