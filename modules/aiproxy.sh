@@ -53,8 +53,10 @@ aip_txt_intro() {
 купить домен и привязать его к Cloudflare. Займёт от 20 минут до вечера,
 потому что часть времени просто ждёшь.
 
-Зато потом всё остальное — просто вставляешь сюда, в Telegram,
-и через пару минут нейронки работают без VPN.
+Как идём:
+ 1. Собираем. Всё, что добудешь, складываешь в Сейф — по пунктам.
+    Закрыл чат, вернулся завтра — собранное никуда не денется.
+ 2. Жмёшь одну кнопку «Устанавливай» и ждёшь пару минут.
 
 Думать не надо, выбирать тоже. Тыкаешь, куда скажу. Погнали.
 EOF
@@ -715,7 +717,7 @@ aip_cli() {
     check-dns)    ensure_pkgs dnsutils >/dev/null 2>&1; aip_dns_ok "dns.${1:?домен}" "${2:-$(server_ip)}" ;;
     install)
       aip_installed && { err "Уже установлено"; return 1; }
-      DOMAIN="${KB_DOMAIN:?}"; CF_TOKEN="${KB_CF_TOKEN:-$(sec_cf_token)}"; FIRST_CLIENT="${KB_CLIENT:-phone}"
+      DOMAIN="${KB_DOMAIN:-$(sec_domain)}"; [ -n "$DOMAIN" ] || { err "Нет домена в сейфе"; return 1; }; CF_TOKEN="${KB_CF_TOKEN:-$(sec_cf_token)}"; FIRST_CLIENT="${KB_CLIENT:-$(sec_client)}"; FIRST_CLIENT="${FIRST_CLIENT:-phone}"
       SERVER_IP="${KB_SERVER_IP:-$(server_ip)}"
       [ -n "$CF_TOKEN" ] || { err "Нет ключа Cloudflare"; return 1; }
       aip_valid_client "$FIRST_CLIENT" || { err "Плохое имя устройства"; return 1; }
