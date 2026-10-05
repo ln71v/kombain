@@ -46,9 +46,9 @@ aip_domain_list() {
 
 aip_explain_domain() {
   todo <<'EOF'
-1. КУПИ ДОМЕН. Любой, хоть за 100 рублей, подойдёт и .ru.
+1. КУПИ ДОМЕН. Подойдёт дешёвый .site или .pro.
    Проверено: reg.ru — покупка быстрая, Cloudflare принимает.
-   Пример: mojdns.ru
+   Пример: mojdns.site
 
 2. ЗАРЕГИСТРИРУЙСЯ В CLOUDFLARE: dash.cloudflare.com → Sign up.
    Это бесплатно. Cloudflare будет держать DNS твоего домена.
@@ -92,13 +92,13 @@ EOF
 aip_ask_domain() {
   local d
   while true; do
-    d=$(ask "Впиши свой домен (например mojdns.ru)")
+    d=$(ask "Впиши свой домен (например mojdns.site)")
     d=$(printf '%s' "$d" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#\.$##; s#^dns\.##')
     if [[ "$d" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
       printf '%s' "$d"
       return 0
     fi
-    warn "Это не похоже на домен. Пример: mojdns.ru"
+    warn "Это не похоже на домен. Пример: mojdns.site"
   done
 }
 
@@ -378,7 +378,7 @@ aip_install() {
     return 0
   fi
   step "Прокси для нейронок: что понадобится"
-  say "Домен (≈100–300 ₽ в год), бесплатный аккаунт Cloudflare и 15 минут."
+  say "Домен (.site или .pro), бесплатный аккаунт Cloudflare и 15 минут."
   say "Я буду останавливаться и говорить, что сделать руками."
   confirm "Начинаем?" || return 0
 
