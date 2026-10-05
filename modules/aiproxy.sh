@@ -44,8 +44,9 @@ aip_domain_list() {
 
 # ───────────────────────── установка ─────────────────────────
 
-aip_explain_domain() {
-  todo <<'EOF'
+aip_explain_domain() { aip_txt_domain | todo; }
+aip_txt_domain() {
+  cat <<'EOF'
 1. КУПИ ДОМЕН. Любой, самый дешёвый.
    Проверено: reg.ru — покупка быстрая, Cloudflare принимает.
    Пример: mojdns.site
@@ -66,9 +67,10 @@ aip_explain_domain() {
 EOF
 }
 
-aip_explain_records() {
+aip_explain_records() { aip_txt_records "$1" | todo; }
+aip_txt_records() {
   local ip="$1"
-  todo <<EOF
+  cat <<EOF
 В Cloudflare открой свой домен → слева DNS → Records → Add record.
 Создай ДВЕ записи:
 
@@ -79,8 +81,9 @@ aip_explain_records() {
 EOF
 }
 
-aip_explain_token() {
-  todo <<'EOF'
+aip_explain_token() { aip_txt_token | todo; }
+aip_txt_token() {
+  cat <<'EOF'
 Нужен ключ Cloudflare, чтобы сервер сам получил сертификат:
 
 1. Cloudflare → справа вверху значок человечка → My Profile
@@ -105,17 +108,24 @@ aip_ask_domain() {
   done
 }
 
-# Ждём, пока dns.<домен> и test.dns.<домен> смотрят на наш IP
-aip_wait_dns() {
+# Смотрят ли dns.<домен> и *.dns.<домен> на наш IP. 0 — да.
+aip_dns_ok() {
   local host="$1" ip="$2" a b
+  a=$(dig +short @1.1.1.1 "$host" A | tail -1)
+  b=$(dig +short @1.1.1.1 "proverka.$host" A | tail -1)
+  if [ "$a" = "$ip" ] && [ "$b" = "$ip" ]; then
+    ok "Записи видны: $host и *.$host → $ip"
+    return 0
+  fi
+  warn "Пока не вижу: $host → ${a:-ничего}, *.$host → ${b:-ничего} (нужно $ip)"
+  return 1
+}
+
+# Ждём, пока записи появятся (для терминала)
+aip_wait_dns() {
+  local host="$1" ip="$2"
   while true; do
-    a=$(dig +short @1.1.1.1 "$host" A | tail -1)
-    b=$(dig +short @1.1.1.1 "proverka.$host" A | tail -1)
-    if [ "$a" = "$ip" ] && [ "$b" = "$ip" ]; then
-      ok "Записи видны: $host и *.$host → $ip"
-      return 0
-    fi
-    warn "Пока не вижу: $host → ${a:-ничего}, *.$host → ${b:-ничего} (нужно $ip)"
+    aip_dns_ok "$host" "$ip" && return 0
     say "Если только что поменял NS у регистратора — подожди 10–30 минут."
     if ! confirm "Проверить ещё раз?"; then
       confirm "Продолжить без проверки (сертификат может не получиться)?" && return 0
@@ -385,8 +395,7 @@ aip_install() {
   say "Я буду останавливаться и говорить, что сделать руками."
   confirm "Начинаем?" || return 0
 
-  ensure_pkgs curl jq dnsutils openssl cron || return 1
-  ensure_docker || return 1
+  ensure_pkgs curl jq dnsutils openssl || return 1
 
   SERVER_IP=$(server_ip)
   SERVER_IP=$(ask "IP этого сервера" "$SERVER_IP")
@@ -415,6 +424,19 @@ aip_install() {
     warn "Только маленькие латинские буквы, цифры и дефис."
   done
 
+  aip_install_core || return 1
+  aip_status
+  aip_show_howto "$FIRST_CLIENT"
+  warn "Пароль от админки сохранён в $AIP_ENV — смотри через пункт «Как подключить»."
+}
+
+# Установка без вопросов. Нужны: SERVER_IP, DOMAIN, CF_TOKEN, FIRST_CLIENT.
+# Её же зовёт бот.
+aip_install_core() {
+  DNS_HOST="dns.$DOMAIN"
+  ensure_pkgs curl jq dnsutils openssl cron ufw || return 1
+  ensure_docker || return 1
+
   step "Проверяю порты"
   aip_free_port53 || return 1
   aip_check_ports || { err "Освободи порты и запусти установку снова."; return 1; }
@@ -431,9 +453,8 @@ aip_install() {
   aip_save_env
   unset CF_TOKEN
 
-  aip_status
-  aip_show_howto "$FIRST_CLIENT"
-  warn "Пароль от админки сохранён в $AIP_ENV — смотри через пункт «Как подключить»."
+  fw_register aiproxy "443/tcp 53/tcp 53/udp 853/tcp 853/udp"
+  fw_apply
 }
 
 # ───────────────────────── обслуживание ─────────────────────────
@@ -505,9 +526,16 @@ aip_remove() {
   aip_installed || { warn "Не установлен."; return 0; }
   warn "Удалю AdGuard, nginx и автопродление сертификата. Устройства перестанут работать."
   confirm "Точно удалить?" || return 0
+  local purge=0
+  confirm "Удалить ещё и данные (настройки, сертификат, пароль)? Это необратимо" && purge=1
+  aip_remove_core "$purge"
+}
+
+aip_remove_core() {
   docker rm -f "$AIP_C_AGH" "$AIP_C_NGX" >/dev/null 2>&1
   rm -f "$AIP_CRON"
-  if confirm "Удалить ещё и данные (настройки, сертификат, пароль)? Это необратимо"; then
+  fw_unregister aiproxy
+  if [ "${1:-0}" = "1" ]; then
     rm -rf "$AIP_DIR" "$KB_HOME/bin/cert-renew.sh"
     ok "Удалено полностью"
   else
@@ -544,4 +572,46 @@ EOF
       *) warn "Нет такого пункта" ;;
     esac
   done
+}
+
+# ───────────────────────── команды для бота ─────────────────────────
+# kombain cli aiproxy <команда> [аргументы]
+
+aip_valid_client() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]; }
+
+aip_cli() {
+  local cmd="${1:-}"; shift || true
+  case "$cmd" in
+    info)
+      if aip_installed; then
+        aip_load_env
+        jq -nc --arg d "$DOMAIN" --arg h "$DNS_HOST" --arg ip "$SERVER_IP" \
+          --argjson c "$(aip_api GET /access/list 2>/dev/null | jq -c '.allowed_clients // []' || echo '[]')" \
+          '{installed:true, domain:$d, dns_host:$h, server_ip:$ip, clients:$c}'
+      else
+        jq -nc --arg ip "$(server_ip)" '{installed:false, server_ip:$ip}'
+      fi ;;
+    text-domain)  aip_txt_domain ;;
+    text-records) aip_txt_records "${1:?ip}" ;;
+    text-token)   aip_txt_token ;;
+    check-dns)    ensure_pkgs dnsutils >/dev/null 2>&1; aip_dns_ok "dns.${1:?домен}" "${2:-$(server_ip)}" ;;
+    install)
+      aip_installed && { err "Уже установлено"; return 1; }
+      DOMAIN="${KB_DOMAIN:?}"; CF_TOKEN="${KB_CF_TOKEN:?}"; FIRST_CLIENT="${KB_CLIENT:-phone}"
+      SERVER_IP="${KB_SERVER_IP:-$(server_ip)}"
+      aip_valid_client "$FIRST_CLIENT" || { err "Плохое имя устройства"; return 1; }
+      aip_install_core ;;
+    status)         aip_status ;;
+    logs)           aip_logs ;;
+    restart)        aip_restart ;;
+    update-domains) aip_update_domains ;;
+    add-client)
+      aip_installed || { err "Не установлен"; return 1; }
+      aip_load_env
+      aip_valid_client "${1:-}" || { err "Только маленькие латинские буквы, цифры и дефис"; return 1; }
+      aip_set_clients "$1" ;;
+    howto)          aip_installed || return 1; aip_show_howto "${1:?имя}" ;;
+    remove)         aip_installed || return 1; aip_remove_core "$([ "${1:-}" = "--purge" ] && echo 1 || echo 0)" ;;
+    *) err "Неизвестная команда: $cmd"; return 2 ;;
+  esac
 }
