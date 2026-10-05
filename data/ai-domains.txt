@@ -1,0 +1,34 @@
+# Домены нейронок, которые идут через сервер.
+# Точка в начале = домен и все его поддомены (.openai.com = openai.com и *.openai.com).
+# Без точки = только этот адрес.
+# Добавил строку — в меню выбери «Обновить список нейронок».
+
+# Google / Gemini
+.google.com
+.googleapis.com
+
+# Claude
+.claude.ai
+.anthropic.com
+
+# Microsoft Copilot
+.microsoft.com
+.office.com
+
+# OpenAI / ChatGPT
+.openai.com
+.chatgpt.com
+.oaistatic.com
+.oaiusercontent.com
+.oaistatsig.com
+.openaimerge.com
+.workos.com
+.workoscdn.com
+workos.imgix.net
+challenges.cloudflare.com
+.sendgrid.net
+.intercom.io
+.intercomcdn.com
+js.stripe.com
+.ingest.sentry.io
+rum.browser-intake-datadoghq.com
