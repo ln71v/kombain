@@ -46,8 +46,9 @@ aip_domain_list() {
 
 aip_explain_domain() {
   todo <<'EOF'
-1. КУПИ ДОМЕН. Любой, хоть за 100 рублей: reg.ru, nic.ru, beget —
-   подойдёт и .ru. Пример: mojdns.ru
+1. КУПИ ДОМЕН. Любой, хоть за 100 рублей, подойдёт и .ru.
+   Проверено: reg.ru — покупка быстрая, Cloudflare принимает.
+   Пример: mojdns.ru
 
 2. ЗАРЕГИСТРИРУЙСЯ В CLOUDFLARE: dash.cloudflare.com → Sign up.
    Это бесплатно. Cloudflare будет держать DNS твоего домена.
