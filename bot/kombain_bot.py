@@ -21,7 +21,10 @@ import urllib.error
 import urllib.request
 
 TOKEN = os.environ["BOT_TOKEN"]
-ADMIN = int(os.environ["ADMIN_ID"])
+ADMIN = int(os.environ.get("ADMIN_ID") or 0)
+CLAIM_CODE = os.environ.get("CLAIM_CODE", "").strip()
+BOT_ENV = "/opt/kombain/bot/env"
+claim_fails = {}         # кто сколько раз ошибся кодом
 KB_SRC = os.environ.get("KB_SRC", "/opt/kombain/src")
 KB = os.path.join(KB_SRC, "kombain.sh")
 LOG_DIR = "/opt/kombain/logs"
@@ -441,6 +444,31 @@ def on_callback(q):
         ai_callback(chat, data)
 
 
+def claim(m):
+    """Хозяин ещё не привязан: ждём код из установщика. Кто прислал — тот хозяин."""
+    global ADMIN
+    uid, chat = m["from"]["id"], m["chat"]["id"]
+    text = (m.get("text") or "").strip()
+    if not CLAIM_CODE or claim_fails.get(uid, 0) >= 5 or sum(claim_fails.values()) >= 50:
+        return
+    if text == CLAIM_CODE:
+        with open(BOT_ENV) as f:
+            lines = f.read().splitlines()
+        lines = [f"ADMIN_ID={uid}" if l.startswith("ADMIN_ID=") else
+                 "CLAIM_CODE=" if l.startswith("CLAIM_CODE=") else l for l in lines]
+        with open(BOT_ENV, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        ADMIN = uid
+        send(chat, "🤝 Есть! Теперь я слушаюсь только тебя.\n\n"
+                   "Окно установщика на компе можно закрывать. Дальше всё здесь 👇", MAIN_KB)
+        return
+    if text.isdigit():
+        claim_fails[uid] = claim_fails.get(uid, 0) + 1
+        send(chat, "❌ Не тот код. Посмотри в окне установщика.")
+    else:
+        send(chat, "👋 Пришли код из окна установщика — 6 цифр.")
+
+
 def main():
     offset = 0
     print("kombain bot started", flush=True)
@@ -454,6 +482,13 @@ def main():
         for u in r.get("result", []):
             offset = u["update_id"] + 1
             src = u.get("message") or u.get("callback_query") or {}
+            if not ADMIN:
+                if "message" in u and u["message"].get("chat", {}).get("type") == "private":
+                    try:
+                        claim(u["message"])
+                    except Exception:
+                        traceback.print_exc()
+                continue
             if (src.get("from") or {}).get("id") != ADMIN:
                 continue   # чужим не отвечаем
             try:
