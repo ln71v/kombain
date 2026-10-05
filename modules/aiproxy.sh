@@ -45,53 +45,102 @@ aip_domain_list() {
 # ───────────────────────── установка ─────────────────────────
 
 aip_explain_domain() { aip_txt_domain | todo; }
-aip_txt_domain() {
+aip_txt_intro() {
   cat <<'EOF'
-1. КУПИ ДОМЕН. Любой, самый дешёвый.
-   Проверено: reg.ru — покупка быстрая, Cloudflare принимает.
-   Пример: mojdns.site
-   СРАЗУ СКРОЙ СВОИ ДАННЫЕ, иначе телефон и почту видит любой:
-   reg.ru → домен → «Управление» → «Ещё услуги» →
-   «Скрытие персональных данных» → «Заказать» (платно).
+Привет, брат! Щас за 20 минут сделаем так, что ChatGPT, Gemini и Claude
+будут открываться без всякого VPN.
 
-2. ЗАРЕГИСТРИРУЙСЯ В CLOUDFLARE: dash.cloudflare.com → Sign up.
-   Это бесплатно. Cloudflare будет держать DNS твоего домена.
+Познакомишься с двумя ребятами:
+ • REG.RU — там купим домен (это просто имя в интернете, типа mojdns.site)
+ • Cloudflare — бесплатно будет держать этот домен
 
-3. ДОБАВЬ ДОМЕН В CLOUDFLARE:
-   кнопка «Add a domain» → впиши домен → план Free → Continue.
-   Cloudflare покажет два адреса вида xxx.ns.cloudflare.com.
-
-4. У РЕГИСТРАТОРА (где купил домен) найди «DNS-серверы» / «NS»
-   и замени их на эти два адреса от Cloudflare. Сохрани.
-   Обновляется от 10 минут до суток, обычно быстро.
+Думать ничего не надо. Выбирать тоже. Тыкаешь, куда скажу, и ждёшь.
 EOF
 }
+
+aip_txt_buy() {
+  cat <<'EOF'
+ЭТАП 1. ПОКУПАЕМ ДОМЕН
+
+1. Открой https://www.reg.ru и зарегистрируйся (почта + телефон).
+2. В поиске на главной впиши любое имя. Название вообще не важно:
+   хоть «koshka-na-korove», хоть своё имя. Зона (.ru, .site, .pro…) — любая,
+   бери самую дешёвую из того, что предложат.
+3. «В корзину» → «Оформить».
+4. АВТОПРОДЛЕНИЕ НЕ ВКЛЮЧАЙ. Галку снимай, если стоит.
+5. Оплати. Домен твой.
+6. Сразу скрой свои данные, иначе твои телефон и почту увидит любой:
+   reg.ru → «Домены» → твой домен → «Управление» → внизу «Ещё услуги» →
+   «Скрытие персональных данных» → «Заказать».
+   (Для .ru это обычно уже включено само.)
+EOF
+}
+
+aip_txt_cf() {
+  cat <<'EOF'
+ЭТАП 2. CLOUDFLARE
+
+Сайт на английском — ничего страшного, пишу точные названия кнопок.
+
+1. Открой https://dash.cloudflare.com/sign-up
+   Впиши почту и пароль → «Sign up». Подтверди почту по письму.
+2. В панели нажми «Add a domain» (или «+ Add» → «Connect a domain»).
+3. Впиши свой домен, например mojdns.site → «Continue».
+4. Тариф: листай вниз до «Free» ($0) → выбери его → «Continue».
+5. Cloudflare покажет ДВА адреса вида
+      anna.ns.cloudflare.com
+      bob.ns.cloudflare.com
+   Скопируй их куда-нибудь.
+6. Иди обратно в reg.ru → «Домены» → твой домен →
+   «DNS-серверы и управление зоной» → «Изменить» →
+   «Свой список DNS-серверов» → впиши эти два адреса → «Сохранить».
+7. Теперь ЖДИ. Обычно 10–30 минут, иногда до суток.
+   Пей пиво, обновляй страницу Cloudflare.
+   Когда домен станет «Active» (Cloudflare ещё и письмо пришлёт) — едем дальше.
+EOF
+}
+
+aip_txt_domain() { aip_txt_intro; echo; aip_txt_buy; echo; aip_txt_cf; }
 
 aip_explain_records() { aip_txt_records "$1" | todo; }
 aip_txt_records() {
   local ip="$1"
   cat <<EOF
-В Cloudflare открой свой домен → слева DNS → Records → Add record.
-Создай ДВЕ записи:
+ЭТАП 3. ДВЕ ЗАПИСИ В CLOUDFLARE
 
-  Type: A   Name: dns     IPv4: $ip   Proxy status: DNS only (СЕРОЕ облако)
-  Type: A   Name: *.dns   IPv4: $ip   Proxy status: DNS only (СЕРОЕ облако)
+1. В Cloudflare нажми на свой домен.
+2. Слева «DNS» → «Records».
+3. Кнопка «+ Add record». Заполни:
+     Type:          A
+     Name:          dns
+     IPv4 address:  $ip
+     Proxy status:  нажми на оранжевое облако, чтобы стало СЕРЫМ
+                    («DNS only»)
+   → «Save».
+4. Ещё раз «+ Add record», всё то же самое, только
+     Name:          *.dns
+   → «Save».
 
-Облако обязательно СЕРОЕ. Оранжевое = не заработает.
+Облако ОБЯЗАТЕЛЬНО серое. Оранжевое — ничего не заработает.
+Цифры $ip — это адрес твоего сервера, вписывай ровно их.
 EOF
 }
-
 aip_explain_token() { aip_txt_token | todo; }
 aip_txt_token() {
   cat <<'EOF'
-Нужен ключ Cloudflare, чтобы сервер сам получил сертификат:
+ЭТАП 4. КЛЮЧ CLOUDFLARE
 
-1. Cloudflare → справа вверху значок человечка → My Profile
-2. Слева «API Tokens» → «Create Token»
-3. Напротив «Edit zone DNS» нажми «Use template»
-4. Zone Resources: Include → Specific zone → выбери свой домен
-5. Continue to summary → Create Token
-6. Скопируй длинный ключ. Он показывается один раз.
+Он нужен, чтобы сервер сам получил сертификат (замочек https).
+
+1. Открой https://dash.cloudflare.com/profile/api-tokens
+2. «Create Token».
+3. Напротив «Edit zone DNS» нажми «Use template».
+4. Найди «Zone Resources». Там три поля, поставь:
+     Include  →  Specific zone  →  твой домен
+   Остальное не трогай.
+5. Внизу «Continue to summary» → «Create Token».
+6. Появится длинная строка — это ключ. «Copy».
+   Он показывается ОДИН раз. Потерял — просто сделай новый.
 EOF
 }
 
@@ -449,23 +498,27 @@ aip_install() {
   SERVER_IP=$(server_ip)
   SERVER_IP=$(ask "IP этого сервера" "$SERVER_IP")
 
-  step "Шаг 1 из 4: домен"
-  aip_explain_domain
-  confirm "Домен купил и добавил в Cloudflare?" || { say "Возвращайся, когда будет домен."; return 0; }
+  aip_txt_intro
+  step "Этап 1: домен"
+  aip_txt_buy | todo
+  confirm "Домен купил?" || { say "Возвращайся, когда будет домен."; return 0; }
+  step "Этап 2: Cloudflare"
+  aip_txt_cf | todo
+  confirm "Домен в Cloudflare стал Active?" || { say "Подожди и запусти установку снова — начнём с этого места."; return 0; }
   DOMAIN=$(aip_ask_domain)
   DNS_HOST="dns.$DOMAIN"
 
-  step "Шаг 2 из 4: записи в Cloudflare"
+  step "Этап 3: записи"
   aip_explain_records "$SERVER_IP"
   pause
   aip_wait_dns "$DNS_HOST" "$SERVER_IP" || return 1
 
-  step "Шаг 3 из 4: ключ Cloudflare"
+  step "Этап 4: ключ"
   aip_explain_token
   CF_TOKEN=$(ask_secret "Вставь ключ (ввод не видно, это нормально)")
   [ -z "$CF_TOKEN" ] && { err "Ключ пустой"; return 1; }
 
-  step "Шаг 4 из 4: первое устройство"
+  step "Этап 5: твой телефон"
   say "Придумай имя для своего телефона латиницей: например vasya-phone."
   while true; do
     FIRST_CLIENT=$(ask "Имя устройства" "phone" | tr 'A-Z' 'a-z')
@@ -641,6 +694,9 @@ aip_cli() {
         jq -nc --arg ip "$(server_ip)" '{installed:false, server_ip:$ip}'
       fi ;;
     text-domain)  aip_txt_domain ;;
+    text-intro)   aip_txt_intro ;;
+    text-buy)     aip_txt_buy ;;
+    text-cf)      aip_txt_cf ;;
     text-records) aip_txt_records "${1:?ip}" ;;
     text-token)   aip_txt_token ;;
     check-dns)    ensure_pkgs dnsutils >/dev/null 2>&1; aip_dns_ok "dns.${1:?домен}" "${2:-$(server_ip)}" ;;
