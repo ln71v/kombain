@@ -32,16 +32,14 @@ sec_mask() { local t="$1"; [ -n "$t" ] && printf '…%s' "${t: -4}"; }
 
 sec_txt_where() {
   cat <<'EOF'
-Где брать ключи:
+Где брать API-ключ Cloudflare:
 
-• Ключ Cloudflare — https://dash.cloudflare.com/profile/api-tokens
+• https://dash.cloudflare.com/profile/api-tokens
   «Create Token» → «Edit zone DNS» → «Use template» →
   Zone Resources: Include → Specific zone → твой домен →
   «Continue to summary» → «Create Token» → «Copy».
   Нужен, чтобы сертификаты продлевались сами.
 
-• Токен бота — у @BotFather в Telegram.
-  Новый токен для того же бота: /mybots → твой бот → «API Token» → «Revoke current token».
 EOF
 }
 
