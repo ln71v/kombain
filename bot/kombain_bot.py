@@ -364,14 +364,13 @@ def keys_screen(chat):
     mark = lambda v: f"✅ {esc(v)}" if v else "⬜ пусто"
     text = ("🔐 <b>Сейф</b>\n"
             "Кладёшь сюда ключи один раз — дальше я беру их сам, когда что-то ставлю.\n\n"
-            f"1. Ключ Cloudflare — {mark(i.get('cloudflare'))}\n"
-            f"2. Домен — {mark(i.get('domain'))}\n"
-            f"3. Токен бота — {mark(i.get('bot'))}\n\n")
+            f"1. API-ключ Cloudflare — {mark(i.get('cloudflare'))}\n"
+            f"2. Домен — {mark(i.get('domain'))}\n\n"
+            "Сертификат класть не надо: сервер сам сделает его по ключу Cloudflare и сам продлит.\n\n")
     _, where = kb("secrets", "where", timeout=30)
     send(chat, text + esc(where), inline(
-        [btn("1️⃣ Положить ключ Cloudflare", "sec:cf")],
-        [btn("2️⃣ Положить домен", "sec:domain")],
-        [btn("3️⃣ Заменить токен бота", "sec:bot")]))
+        [btn("1️⃣ Положить API-ключ Cloudflare", "sec:cf")],
+        [btn("2️⃣ Положить домен", "sec:domain")]))
 
 
 def sec_callback(chat, data):
