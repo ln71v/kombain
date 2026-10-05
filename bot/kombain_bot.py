@@ -4,6 +4,11 @@
 Бот ничего не настраивает сам: он вызывает те же команды, что и меню в терминале
 (`kombain.sh cli <модуль> <команда>`). Отвечает только владельцу (ADMIN_ID).
 Только стандартная библиотека Python.
+
+Установка идёт в два этапа:
+  1. Сбор — всё нужное складываем в «Сейф» (домен, записи, ключ, имя телефона).
+     Сейф переживает что угодно: закрыл чат, вернулся завтра — всё на месте.
+  2. Одна кнопка «Устанавливай» — и ждёшь.
 """
 import json
 import os
@@ -22,15 +27,19 @@ KB = os.path.join(KB_SRC, "kombain.sh")
 LOG_DIR = "/opt/kombain/logs"
 API = f"https://api.telegram.org/bot{TOKEN}"
 
-B_AI, B_SERVER, B_HELP, B_KEYS = "🧠 Нейронки", "📊 Сервер", "❓ Помощь", "🔐 Сейф"
-MAIN_KB = {"keyboard": [[{"text": B_AI}], [{"text": B_SERVER}, {"text": B_KEYS}, {"text": B_HELP}]],
+B_AI, B_SAFE, B_SERVER, B_HELP = "🧠 Нейронки", "🔐 Сейф", "📊 Сервер", "❓ Помощь"
+MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_SAFE}], [{"text": B_SERVER}, {"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
 CLIENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
-DOMAIN_RE = re.compile(r"^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$")
 
-state = {}          # chat -> {"step": ..., ...} — пошаговая установка
-busy = threading.Lock()   # одна долгая операция за раз
+state = {}               # chat -> {"step": ...} — чего ждём от пользователя
+records_ok = {}          # домен -> True, когда записи в Cloudflare проверены
+busy = threading.Lock()  # одна долгая операция за раз
+
+SAFE_WARN = ("⚠️ Как только пришлёшь — я сразу удалю твоё сообщение из чата. "
+             "Не пугайся, что оно пропало: так надо, чтобы ключ не висел в переписке. "
+             "Он уже лежит в сейфе.")
 
 
 # ───────────────────────── Telegram ─────────────────────────
@@ -52,8 +61,7 @@ def send(chat, text, markup=None):
     try:
         return call("sendMessage", **p)
     except urllib.error.HTTPError:
-        # если HTML не разобрался — шлём простым текстом
-        p.pop("parse_mode")
+        p.pop("parse_mode")   # если HTML не разобрался — простым текстом
         return call("sendMessage", **p)
 
 
@@ -82,7 +90,11 @@ def btn(text, data):
 
 
 def inline(*rows):
-    return {"inline_keyboard": [list(r) for r in rows]}
+    return {"inline_keyboard": [list(r) for r in rows if r]}
+
+
+CANCEL = [btn("✖️ Отмена", "cancel")]
+TO_SAFE = [btn("🔐 Назад в сейф", "safe:open")]
 
 
 # ───────────────────────── вызов Комбайна ─────────────────────────
@@ -100,12 +112,26 @@ def kb(*args, env=None, timeout=900):
         return 124, "Команда не уложилась по времени."
 
 
-def aip_info():
-    code, out = kb("aiproxy", "info", timeout=60)
+def kb_json(*args):
+    _, out = kb(*args, timeout=60)
     try:
         return json.loads(out.splitlines()[-1])
     except Exception:
-        return {"installed": False, "error": out}
+        return {}
+
+
+def kb_text(name, *args):
+    """Текст подсказки из Комбайна — обычным сообщением, чтобы ссылки нажимались."""
+    _, txt = kb("aiproxy", name, *args, timeout=30)
+    return esc(txt)
+
+
+def aip_info():
+    return kb_json("aiproxy", "info")
+
+
+def sec_info():
+    return kb_json("secrets", "info")
 
 
 def run_long(chat, title, func):
@@ -126,17 +152,152 @@ def run_long(chat, title, func):
     threading.Thread(target=work, daemon=True).start()
 
 
+# ───────────────────────── Сейф: место сбора ─────────────────────────
+def check_records(domain, ip):
+    if records_ok.get(domain):
+        return True, ""
+    code, out = kb("aiproxy", "check-dns", domain, ip, timeout=60)
+    if code == 0:
+        records_ok[domain] = True
+    return code == 0, out
+
+
+def safe_screen(chat):
+    state.pop(chat, None)
+    safe, info = sec_info(), aip_info()
+    ip = info.get("server_ip", "")
+    domain = safe.get("domain")
+    rec = check_records(domain, ip)[0] if domain else False
+    has_key, client = bool(safe.get("cloudflare")), safe.get("client")
+    mark = lambda ok: "✅" if ok else "⬜"
+
+    text = ("🔐 <b>Сейф — сюда собираем всё для установки</b>\n"
+            "Сначала собираем по пунктам. Потом одна кнопка — и ждёшь.\n"
+            "Закрыл чат, вернулся завтра — всё собранное на месте.\n\n"
+            f"{mark(domain)} 1. Домен{': ' + esc(domain) if domain else ''}\n"
+            f"{mark(rec)} 2. Две записи в Cloudflare{'' if domain else ' (сначала домен)'}\n"
+            f"{mark(has_key)} 3. API-ключ Cloudflare{': ' + esc(safe['cloudflare']) if has_key else ''}\n"
+            f"{mark(client)} 4. Имя твоего телефона{': ' + esc(client) if client else ''}\n")
+    rows = []
+    if not domain:
+        rows += [[btn("1️⃣ Как купить домен", "safe:h:buy")], [btn("1️⃣ Положить домен", "safe:put:domain")]]
+    if domain and not rec:
+        rows += [[btn("2️⃣ Что сделать в Cloudflare", "safe:h:rec")], [btn("2️⃣ Проверить записи", "safe:chk")]]
+    if not has_key:
+        rows += [[btn("3️⃣ Где взять ключ", "safe:h:key")], [btn("3️⃣ Положить ключ", "safe:put:cf")]]
+    if not client:
+        rows += [[btn("4️⃣ Назвать phone", "safe:client:phone"), btn("4️⃣ Своё имя", "safe:put:client")]]
+
+    ready = domain and rec and has_key and client
+    if info.get("installed"):
+        text += "\n🧠 Нейронки уже стоят."
+    elif ready:
+        text += "\n🎉 <b>Всё собрано!</b> Жми кнопку и жди."
+        rows.insert(0, [btn("🚀 Всё собрано — устанавливай", "safe:go")])
+    # заменить уже положенное
+    swap = [b for ok, b in ((domain, btn("Сменить домен", "safe:put:domain")),
+                            (has_key, btn("Сменить ключ", "safe:put:cf")),
+                            (client, btn("Сменить имя", "safe:put:client"))) if ok]
+    if swap:
+        rows.append(swap)
+    send(chat, text, {"inline_keyboard": rows} if rows else None)
+
+
+def safe_help(chat, what):
+    if what == "buy":
+        send(chat, kb_text("text-buy"))
+        send(chat, kb_text("text-cf"), inline([btn("✅ Купил, домен Active — положить", "safe:put:domain")], TO_SAFE))
+    elif what == "rec":
+        ip = aip_info().get("server_ip", "")
+        send(chat, kb_text("text-records", ip), inline([btn("✅ Сделал — проверить", "safe:chk")], TO_SAFE))
+    elif what == "key":
+        send(chat, kb_text("text-token"), inline([btn("✅ Скопировал — положить", "safe:put:cf")], TO_SAFE))
+
+
+PUT_ASK = {
+    "domain": "Вставь сюда <b>свой домен</b>, например <code>mojdns.site</code>.",
+    "cf": "Вставь сюда <b>API-ключ Cloudflare</b> — длинную строку после «Create Token» → «Copy».\n\n" + SAFE_WARN,
+    "client": "Как назвать твой телефон? Латиницей, например <code>vasya-phone</code>.",
+}
+
+
+def safe_put_ask(chat, what):
+    state[chat] = {"step": f"put_{what}"}
+    send(chat, PUT_ASK[what], inline(CANCEL))
+
+
+def safe_put(chat, what, text, msg_id):
+    state.pop(chat, None)
+    t = text.strip()
+    if what == "cf":
+        delete(chat, msg_id)
+        code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": t}, timeout=60)
+        send(chat, "🔐 Сообщение удалила" + (", ключ проверен и лежит в сейфе." if code == 0 else "."))
+    elif what == "domain":
+        code, out = kb("secrets", "set-domain", t, timeout=30)
+        records_ok.clear()
+    else:
+        code, out = kb("secrets", "set-client", t, timeout=30)
+    if code != 0:
+        send(chat, "❌ " + esc(last_line(out)), inline([btn("Попробовать ещё раз", f"safe:put:{what}")], TO_SAFE))
+        return
+    send(chat, "📦 " + esc(last_line(out)))
+    safe_screen(chat)
+
+
+def safe_check(chat):
+    safe = sec_info()
+    domain, ip = safe.get("domain"), aip_info().get("server_ip", "")
+    if not domain:
+        safe_screen(chat)
+        return
+    ok, out = check_records(domain, ip)
+    if not ok:
+        send_pre(chat, out, "Пока не вижу записи. Обычно появляются за 1–5 минут.",
+                 inline([btn("🔁 Проверить ещё раз", "safe:chk")], [btn("Что сделать в Cloudflare", "safe:h:rec")],
+                        TO_SAFE))
+        return
+    send(chat, "✅ Записи на месте.")
+    safe_screen(chat)
+
+
+def safe_go(chat):
+    safe, info = sec_info(), aip_info()
+    if info.get("installed"):
+        send(chat, "Нейронки уже стоят.")
+        return
+    if not (safe.get("domain") and safe.get("cloudflare") and safe.get("client")):
+        safe_screen(chat)
+        return
+
+    def job():
+        os.makedirs(LOG_DIR, exist_ok=True)
+        code, out = kb("aiproxy", "install", timeout=1200, env={"KB_SERVER_IP": info.get("server_ip", "")})
+        with open(os.path.join(LOG_DIR, "aiproxy-install.log"), "w") as f:
+            f.write(out)
+        if code != 0:
+            send_pre(chat, "\n".join(out.splitlines()[-30:]), "❌ Установка не прошла. Последние строки:",
+                     inline([btn("🚀 Попробовать снова", "safe:go")], TO_SAFE))
+            return
+        send_pre(chat, "\n".join(out.splitlines()[-12:]), "✅ Готово, брат!")
+        _, how = kb("aiproxy", "howto", safe["client"], timeout=60)
+        send_pre(chat, how, "📲 Как подключить")
+        ai_screen(chat)
+
+    run_long(chat, "Ставлю. Жди, брат, 2–5 минут — я сам напишу. Можешь налить ещё.", job)
+
+
 # ───────────────────────── Нейронки ─────────────────────────
 AI_ABOUT = ("🧠 <b>Прокси для нейронок</b>\n\n"
             "ChatGPT, Gemini, Claude и Copilot откроются без VPN, просто через настройку DNS "
-            "на телефоне или компе. Остальные сайты идут как обычно.\n\n"
-            "Понадобится: домен и бесплатный аккаунт Cloudflare. Я проведу по шагам.")
+            "на телефоне или компе. Остальные сайты идут как обычно.")
 
 
 def ai_screen(chat):
     info = aip_info()
     if not info.get("installed"):
-        send(chat, AI_ABOUT, inline([btn("🚀 Установить", "aip:install")]))
+        send(chat, AI_ABOUT)
+        send(chat, kb_text("text-intro"), inline([btn("📋 Погнали собирать", "safe:open")]))
         return
     clients = info.get("clients") or []
     text = (f"🧠 <b>Прокси для нейронок</b> — стоит\n\n"
@@ -151,180 +312,44 @@ def ai_screen(chat):
     ))
 
 
-def kb_text(name, *args):
-    """Текст подсказки из Комбайна — обычным сообщением, чтобы ссылки нажимались."""
-    _, txt = kb("aiproxy", name, *args, timeout=30)
-    return esc(txt)
-
-
-def ai_install_start(chat):
-    info = aip_info()
-    if info.get("installed"):
-        send(chat, "Уже стоит.")
-        return
-    state[chat] = {"step": "aip_intro", "ip": info.get("server_ip", "")}
-    if sec_info().get("domain"):
-        # домен уже в сейфе — путешествие пройдено, продолжаем с того места
-        send(chat, "📦 Вижу в сейфе твой домен — продолжаю с того места, где остановились.")
-        ai_next(chat)
-        return
-    send(chat, kb_text("text-intro"), inline([btn("🚀 Погнали", "aip:s:buy")], [btn("✖️ Отмена", "cancel")]))
-
-
-def ai_next(chat):
-    """Следующий шаг установки. Что уже лежит в сейфе — не спрашиваем."""
-    st = state.get(chat)
-    if not st:
-        send(chat, "Начни заново: 🧠 Нейронки → Установить.")
-        return
-    safe = sec_info()
-    domain = safe.get("domain")
-    if not domain:
-        st["step"] = "aip_domain"
-        send(chat, "🍺 Всё, самое долгое позади! Дальше только вставляешь сюда.\n\n"
-                   "Пришли свой домен одним сообщением, я положу его в сейф.\n"
-                   "Например: <code>mojdns.site</code>", inline([btn("✖️ Отмена", "cancel")]))
-        return
-    st["domain"] = domain
-    if not st.get("records_ok"):
-        code, out = kb("aiproxy", "check-dns", domain, st["ip"], timeout=60)
-        if code == 0:
-            st["records_ok"] = True
-            send(chat, "✅ Записи в Cloudflare на месте.")
-        else:
-            st["step"] = "aip_records"
-            send(chat, kb_text("text-records", st["ip"]))
-            send(chat, "Сделал обе записи — жми кнопку.",
-                 inline([btn("✅ Сделал, проверить", "aip:checkdns")], [btn("✖️ Отмена", "cancel")]))
-            return
-    if not safe.get("cloudflare"):
-        st["step"] = "aip_token"
-        send(chat, kb_text("text-token"))
-        send(chat, "Вставь ключ сюда, я положу его в сейф.\n\n" + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
-        return
-    send(chat, f"🔐 API-ключ Cloudflare беру из сейфа ({esc(safe['cloudflare'])}).")
-    st["step"] = "aip_client"
-    send(chat, "<b>ПОСЛЕДНИЙ ШАГ. ТВОЙ ТЕЛЕФОН</b>\n"
-               "Как его назвать? Латиницей, например <code>vasya-phone</code>. Или жми кнопку.",
-         inline([btn("Назвать phone", "aip:client:phone")], [btn("✖️ Отмена", "cancel")]))
-
-
-def ai_stage(chat, stage):
-    st = state.get(chat)
-    if not st:
-        send(chat, "Начни заново: 🧠 Нейронки → Установить.")
-        return
-    if stage == "buy":
-        send(chat, kb_text("text-buy"), inline([btn("✅ Купил", "aip:s:cf")], [btn("✖️ Отмена", "cancel")]))
-    elif stage == "cf":
-        send(chat, kb_text("text-cf"),
-             inline([btn("✅ Домен стал Active", "aip:s:domain")], [btn("✖️ Отмена", "cancel")]))
-    elif stage == "domain":
-        ai_next(chat)
-
-
-def ai_got_domain(chat, text):
-    code, out = kb("secrets", "set-domain", text.strip(), timeout=30)
-    if code != 0:
-        send(chat, "❌ " + esc(last_line(out)))
-        return
-    send(chat, "📦 " + esc(last_line(out)))
-    ai_next(chat)
-
-
-def ai_check_dns(chat):
-    st = state.get(chat)
-    if not st or st.get("step") != "aip_records":
-        send(chat, "Начни заново: 🧠 Нейронки → Установить.")
-        return
-    code, out = kb("aiproxy", "check-dns", st["domain"], st["ip"], timeout=60)
-    if code != 0:
-        send_pre(chat, out, "Пока не вижу записи.",
-                 inline([btn("🔁 Проверить ещё раз", "aip:checkdns")], [btn("✖️ Отмена", "cancel")]))
-        send(chat, "Записи обычно видны через 1–5 минут. Подожди и жми ещё раз.")
-        return
-    st["records_ok"] = True
-    send(chat, "✅ Записи на месте.")
-    ai_next(chat)
-
-
-def ai_got_token(chat, text, msg_id):
-    delete(chat, msg_id)
-    code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": text.strip()}, timeout=60)
-    if code != 0:
-        send(chat, "🔐 Сообщение удалила.\n❌ " + esc(last_line(out, "Ключ не подошёл")) +
-             "\nСкопируй ключ целиком и вставь ещё раз.")
-        return
-    send(chat, "🔐 Сообщение удалила, ключ проверен и лежит в сейфе.")
-    ai_next(chat)
-
-
-def ai_got_client(chat, name):
-    name = name.strip().lower()
-    if not CLIENT_RE.match(name):
-        send(chat, "Только маленькие латинские буквы, цифры и дефис. Например <code>vasya-phone</code>.")
-        return
-    st = state.pop(chat, None)
-    if not st or st.get("step") != "aip_client":
-        send(chat, "Начни заново: 🧠 Нейронки → Установить.")
-        return
-
-    def job():
-        os.makedirs(LOG_DIR, exist_ok=True)
-        env = {"KB_DOMAIN": st["domain"], "KB_CLIENT": name, "KB_SERVER_IP": st["ip"]}
-        code, out = kb("aiproxy", "install", timeout=1200, env=env)
-        with open(os.path.join(LOG_DIR, "aiproxy-install.log"), "w") as f:
-            f.write(out)
-        if code != 0:
-            send_pre(chat, "\n".join(out.splitlines()[-30:]), "❌ Установка не прошла. Последние строки:",
-                     inline([btn("🚀 Попробовать снова", "aip:install")]))
-            return
-        send_pre(chat, "\n".join(out.splitlines()[-12:]), "✅ Готово!")
-        _, how = kb("aiproxy", "howto", name, timeout=60)
-        send_pre(chat, how, "📲 Как подключить")
-        ai_screen(chat)
-
-    run_long(chat, "Ставлю AdGuard и прокси. Это 2–5 минут, я напишу.", job)
-
-
 def ai_pick_client(chat, prefix):
     clients = aip_info().get("clients") or []
     if not clients:
         send(chat, "Устройств нет. Добавь: ➕ Добавить устройство.")
         return
-    rows = [[btn(c, f"{prefix}{c}")] for c in clients[:30]]
-    send(chat, "Какое устройство?", {"inline_keyboard": rows})
+    send(chat, "Какое устройство?", {"inline_keyboard": [[btn(c, f"{prefix}{c}")] for c in clients[:30]]})
+
+
+def ai_add_client(chat, text):
+    state.pop(chat, None)
+    name = text.strip().lower()
+    if not CLIENT_RE.match(name):
+        send(chat, "Только маленькие латинские буквы, цифры и дефис.", inline([btn("Ещё раз", "aip:add")]))
+        return
+    code, out = kb("aiproxy", "add-client", name, timeout=60)
+    if code != 0:
+        send_pre(chat, out, "❌ Не добавилось")
+        return
+    _, how = kb("aiproxy", "howto", name, timeout=60)
+    send_pre(chat, how, f"✅ Устройство {esc(name)} добавлено")
 
 
 def ai_callback(chat, data):
-    if data == "aip:install":
-        ai_install_start(chat)
-    elif data.startswith("aip:s:"):
-        ai_stage(chat, data.split(":", 2)[2])
-    elif data == "aip:checkdns":
-        ai_check_dns(chat)
-    elif data.startswith("aip:client:"):
-        ai_got_client(chat, data.split(":", 2)[2])
-    elif data == "aip:add":
+    if data == "aip:add":
         state[chat] = {"step": "aip_add"}
-        send(chat, "Как назвать новое устройство? Латиницей, например <code>mama-phone</code>.",
-             inline([btn("✖️ Отмена", "cancel")]))
+        send(chat, "Как назвать новое устройство? Латиницей, например <code>mama-phone</code>.", inline(CANCEL))
     elif data == "aip:howto":
         ai_pick_client(chat, "aip:how:")
+    elif data.startswith("aip:how:"):
+        send_pre(chat, kb("aiproxy", "howto", data.split(":", 2)[2], timeout=60)[1], "📲 Как подключить")
     elif data == "aip:check":
         ai_pick_client(chat, "aip:chk:")
     elif data.startswith("aip:chk:"):
-        _, out = kb("aiproxy", "check-client", data.split(":", 2)[2], timeout=60)
-        send_pre(chat, out, "🔍 Проверка устройства")
-    elif data.startswith("aip:how:"):
-        _, out = kb("aiproxy", "howto", data.split(":", 2)[2], timeout=60)
-        send_pre(chat, out, "📲 Как подключить")
+        send_pre(chat, kb("aiproxy", "check-client", data.split(":", 2)[2], timeout=60)[1], "🔍 Проверка устройства")
     elif data == "aip:status":
-        _, out = kb("aiproxy", "status", timeout=120)
-        send_pre(chat, out, "📊 Состояние")
+        send_pre(chat, kb("aiproxy", "status", timeout=120)[1], "📊 Состояние")
     elif data == "aip:logs":
-        _, out = kb("aiproxy", "logs", timeout=60)
-        send_pre(chat, out, "📜 Логи")
+        send_pre(chat, kb("aiproxy", "logs", timeout=60)[1], "📜 Логи")
     elif data == "aip:upd":
         run_long(chat, "Обновляю список нейронок…",
                  lambda: send_pre(chat, kb("aiproxy", "update-domains")[1], "🔄 Готово"))
@@ -333,70 +358,25 @@ def ai_callback(chat, data):
     elif data == "aip:rm":
         send(chat, "🗑 Удалить прокси для нейронок? Все устройства перестанут работать.",
              inline([btn("Удалить, данные оставить", "aip:rm:keep")],
-                    [btn("Удалить всё насовсем", "aip:rm:purge")],
-                    [btn("✖️ Нет", "cancel")]))
+                    [btn("Удалить всё насовсем", "aip:rm:purge")], CANCEL))
     elif data in ("aip:rm:keep", "aip:rm:purge"):
         args = ["aiproxy", "remove"] + (["--purge"] if data.endswith("purge") else [])
         run_long(chat, "Удаляю…", lambda: send_pre(chat, kb(*args)[1], "🗑 Готово"))
 
 
-# ───────────────────────── ключи ─────────────────────────
-def sec_info():
-    code, out = kb("secrets", "info", timeout=30)
-    try:
-        return json.loads(out.splitlines()[-1])
-    except Exception:
-        return {}
-
-
-SAFE_WARN = ("⚠️ Как только пришлёшь — я сразу удалю твоё сообщение из чата. "
-             "Не пугайся, что оно пропало: так надо, чтобы ключ не висел в переписке. "
-             "Он уже лежит в сейфе.")
-
-
-def keys_screen(chat):
-    i = sec_info()
-    mark = lambda v: f"✅ {esc(v)}" if v else "⬜ пусто"
-    text = ("🔐 <b>Сейф</b>\n"
-            "Кладёшь сюда ключи один раз — дальше я беру их сам, когда что-то ставлю.\n\n"
-            f"1. API-ключ Cloudflare — {mark(i.get('cloudflare'))}\n"
-            f"2. Домен — {mark(i.get('domain'))}\n\n"
-            "Сертификат класть не надо: сервер сам сделает его по ключу Cloudflare и сам продлит.\n\n")
-    _, where = kb("secrets", "where", timeout=30)
-    send(chat, text + esc(where), inline(
-        [btn("1️⃣ Положить API-ключ Cloudflare", "sec:cf")],
-        [btn("2️⃣ Положить домен", "sec:domain")]))
-
-
-def sec_callback(chat, data):
-    if data == "sec:cf":
-        state[chat] = {"step": "sec_cf"}
-        send(chat, "Вставь сюда <b>ключ Cloudflare</b> — длинную строку, которую скопировал после «Create Token».\n\n"
-             + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
-    elif data == "sec:domain":
-        state[chat] = {"step": "sec_domain"}
-        send(chat, "Вставь сюда <b>свой домен</b>, например <code>mojdns.site</code>.",
-             inline([btn("✖️ Отмена", "cancel")]))
-    elif data == "sec:bot":
-        state[chat] = {"step": "sec_bot"}
-        send(chat, "Вставь сюда <b>новый токен бота</b> от @BotFather. После этого я перезапущусь.\n\n"
-             + SAFE_WARN, inline([btn("✖️ Отмена", "cancel")]))
-
-
-def sec_got(chat, step, text, msg_id):
-    state.pop(chat, None)
-    t = text.strip()
-    if step == "sec_domain":
-        code, out = kb("secrets", "set-domain", t, timeout=30)
-        send(chat, ("✅ " if code == 0 else "❌ ") + esc(last_line(out)))
-        return
-    delete(chat, msg_id)
-    if step == "sec_cf":
-        code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": t}, timeout=60)
-    else:
-        code, out = kb("secrets", "set-bot", env={"KB_BOT_TOKEN": t}, timeout=60)
-    send(chat, "🔐 Сообщение удалила, ключ в сейфе.\n" if code == 0 else "🔐 Сообщение удалила.\n")
-    send(chat, ("✅ " if code == 0 else "❌ ") + esc(last_line(out)))
+def safe_callback(chat, data):
+    if data == "safe:open":
+        safe_screen(chat)
+    elif data.startswith("safe:h:"):
+        safe_help(chat, data.split(":", 2)[2])
+    elif data.startswith("safe:put:"):
+        safe_put_ask(chat, data.split(":", 2)[2])
+    elif data.startswith("safe:client:"):
+        safe_put(chat, "client", data.split(":", 2)[2], None)
+    elif data == "safe:chk":
+        safe_check(chat)
+    elif data == "safe:go":
+        safe_go(chat)
 
 
 # ───────────────────────── общие экраны ─────────────────────────
@@ -411,9 +391,9 @@ def server_screen(chat):
 
 
 HELP = ("🤖 <b>Пульт Комбайна</b>\n\n"
-        "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS. Установка, устройства, состояние.\n"
-        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n"
-        "🔐 <b>Сейф</b> — положи сюда ключи один раз, дальше я беру их сам.\n\n"
+        "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS.\n"
+        "🔐 <b>Сейф</b> — место сбора: сюда складываешь всё для установки, потом одна кнопка.\n"
+        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
         "Скоро здесь же: VLESS, AmneziaWG, WARP, Telegram-прокси.\n\n"
         "Отменить любой шаг — /cancel.")
 
@@ -429,42 +409,18 @@ def on_message(m):
         state.pop(chat, None)
         send(chat, "Отменил.", MAIN_KB)
         return
-    if text == B_AI:
+    screens = {B_AI: ai_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
+               B_HELP: lambda c: send(c, HELP, MAIN_KB)}
+    if text in screens:
         state.pop(chat, None)
-        ai_screen(chat)
-        return
-    if text == B_SERVER:
-        server_screen(chat)
-        return
-    if text == B_KEYS:
-        state.pop(chat, None)
-        keys_screen(chat)
-        return
-    if text == B_HELP:
-        send(chat, HELP, MAIN_KB)
+        screens[text](chat)
         return
 
-    st = state.get(chat, {}).get("step")
-    if st in ("sec_cf", "sec_bot", "sec_domain"):
-        sec_got(chat, st, text, m["message_id"])
-    elif st == "aip_domain":
-        ai_got_domain(chat, text)
-    elif st == "aip_token":
-        ai_got_token(chat, text, m["message_id"])
-    elif st == "aip_client":
-        ai_got_client(chat, text)
-    elif st == "aip_add":
-        name = text.strip().lower()
-        if not CLIENT_RE.match(name):
-            send(chat, "Только маленькие латинские буквы, цифры и дефис.")
-            return
-        state.pop(chat, None)
-        code, out = kb("aiproxy", "add-client", name, timeout=60)
-        if code != 0:
-            send_pre(chat, out, "❌ Не добавилось")
-            return
-        _, how = kb("aiproxy", "howto", name, timeout=60)
-        send_pre(chat, how, f"✅ Устройство {esc(name)} добавлено")
+    step = state.get(chat, {}).get("step", "")
+    if step.startswith("put_"):
+        safe_put(chat, step[4:], text, m["message_id"])
+    elif step == "aip_add":
+        ai_add_client(chat, text)
     else:
         send(chat, "Выбирай кнопкой внизу 👇", MAIN_KB)
 
@@ -479,10 +435,10 @@ def on_callback(q):
     if data == "cancel":
         state.pop(chat, None)
         send(chat, "Отменил.", MAIN_KB)
+    elif data.startswith("safe:"):
+        safe_callback(chat, data)
     elif data.startswith("aip:"):
         ai_callback(chat, data)
-    elif data.startswith("sec:"):
-        sec_callback(chat, data)
 
 
 def main():

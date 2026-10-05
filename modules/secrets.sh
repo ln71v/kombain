@@ -7,6 +7,7 @@
 KB_SECRETS="$KB_HOME/secrets"
 KB_CF_FILE="$KB_SECRETS/cloudflare.ini"
 KB_DOMAIN_FILE="$KB_HOME/domain"
+KB_CLIENT_FILE="$KB_HOME/first-client"
 
 sec_cf_token() { sed -n 's/^dns_cloudflare_api_token = //p' "$KB_CF_FILE" 2>/dev/null; }
 
@@ -27,6 +28,8 @@ sec_cf_save() {
 
 sec_domain()      { cat "$KB_DOMAIN_FILE" 2>/dev/null; }
 sec_domain_save() { mkdir -p "$KB_HOME"; printf '%s\n' "$1" >"$KB_DOMAIN_FILE"; }
+
+sec_client()      { cat "$KB_CLIENT_FILE" 2>/dev/null; }
 
 sec_mask() { local t="$1"; [ -n "$t" ] && printf '…%s' "${t: -4}"; }
 
@@ -49,9 +52,8 @@ sec_cli() {
   case "$cmd" in
     info)
       local cf; cf=$(sec_cf_token)
-      jq -nc --arg cf "$(sec_mask "$cf")" --arg d "$(sec_domain)" \
-        --arg bot "$(sed -n 's/^BOT_TOKEN=//p' "$KB_HOME/bot/env" 2>/dev/null | tail -c 5)" \
-        '{cloudflare:$cf, domain:$d, bot:(if $bot=="" then "" else "…"+$bot end)}' ;;
+      jq -nc --arg cf "$(sec_mask "$cf")" --arg d "$(sec_domain)" --arg c "$(sec_client)" \
+        '{cloudflare:$cf, domain:$d, client:$c}' ;;
     where)  sec_txt_where ;;
     check-cf)
       ensure_pkgs curl jq >/dev/null 2>&1
@@ -66,6 +68,10 @@ sec_cli() {
       d=$(printf '%s' "$d" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#\.$##; s#^dns\.##')
       [[ "$d" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]] || { err "Это не похоже на домен. Пример: mojdns.site"; return 1; }
       sec_domain_save "$d" && ok "Домен $d в сейфе" ;;
+    set-client)
+      local c; c=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z' | tr -d ' ')
+      [[ "$c" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { err "Только маленькие латинские буквы, цифры и дефис. Пример: vasya-phone"; return 1; }
+      mkdir -p "$KB_HOME"; printf '%s\n' "$c" >"$KB_CLIENT_FILE"; ok "Имя телефона $c в сейфе" ;;
     set-bot)
       local t="${KB_BOT_TOKEN:?}" name
       name=$(bot_check_token "$t")
