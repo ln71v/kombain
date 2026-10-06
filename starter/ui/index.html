@@ -1,0 +1,466 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<title>Комбайн</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;700&display=swap">
+<style>
+html,body{margin:0;width:720px;height:520px;overflow:hidden;background:#FBFAF7;color:#18212B;font-family:Manrope,sans-serif}
+.screen[hidden],[hidden]{display:none!important}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}a{color:#0E6B5C}
+.content{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;padding:28px 44px 0;overflow:auto}
+.content h1{margin:0;font-family:Unbounded,sans-serif;font-weight:700;font-size:24px;line-height:1.2}
+.caption{margin:0;font-size:14px;line-height:1.5;color:#5A6470}
+.footer{height:76px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 44px}
+.primary,.secondary{height:44px;padding:0 24px;border:0;border-radius:10px;background:#0E6B5C;color:#FFF;font:700 15px Manrope,sans-serif}
+.secondary{padding:0 18px;border:1px solid #D9D5CC;background:#FFF;color:#5A6470;font-weight:500}
+label{display:flex;flex-direction:column;gap:7px;font-size:14px;font-weight:700}
+form{display:flex;flex-direction:column;gap:14px}input:not([type=checkbox]){box-sizing:border-box;width:100%;height:44px;border:1px solid #D9D5CC;border-radius:10px;background:#FFF;padding:0 14px;color:#18212B;font:15px Manrope,sans-serif}
+input:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #0E6B5C;outline-offset:2px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.fingerprint{font-size:12px;line-height:1.4;color:#5A6470;overflow-wrap:anywhere}
+.message{font-size:14px;line-height:1.4;color:#9A4A0A;background:#FDF1E4;padding:10px 14px;border-radius:10px}
+.steps{display:flex;flex-direction:column;gap:13px;font-size:16px}.steps span{display:inline-block;width:26px;color:#0E6B5C;font-weight:700}
+summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:100px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.45 Consolas,monospace;padding:10px;background:#F3F1EC;border:1px solid #E4E1DA;border-radius:10px;margin:8px 0 0}
+#wait-error{max-width:540px}#screen-11 #retry-wait,#screen-11 #close-final{height:36px;flex-shrink:0}
+#screen-11 .message{font-size:12px;padding:6px 10px}
+#screen-11:has(#wait-error:not([hidden]))>div>div:nth-child(2){gap:10px!important;padding-top:22px!important}
+</style></head><body><section class="screen" id="screen-1"><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 1 из 7">
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 22px; padding: 34px 44px 0">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 30px; line-height: 1.15">Привет! Это Комбайн —<br>для ленивых.</h1>
+      <p style="margin: 0; font-size: 17px; color: #5A6470">Ты тыкаешь, он делает.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E4E1DA; border-radius: 10px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path></svg>
+        <span style="font-size: 14px; line-height: 1.35"><b>Свой DNS</b> — реклама и слежка режутся</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E4E1DA; border-radius: 10px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>
+        <span style="font-size: 14px; line-height: 1.35"><b>ChatGPT, Gemini, Claude</b> — без VPN</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E4E1DA; border-radius: 10px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"></path></svg>
+        <span style="font-size: 14px; line-height: 1.35"><b>Telegram</b> — без VPN, через свой прокси</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: #F3F1EC; border: 1px dashed #D9D5CC; border-radius: 10px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5A6470" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+        <span style="font-size: 14px; line-height: 1.35; color: #5A6470"><b>VPN</b> — полный обход (скоро)</span>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 14px; color: #5A6470; line-height: 1.5">Ставишь один раз — дальше всё в Telegram-боте.<br>Пароль не сохраняю. На твоём компе ничего не меняю.</p>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">Выход</button>
+    <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Дальше →</button>
+  </div>
+</div></section>
+<section class="screen" id="screen-2" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 2 из 7">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; padding: 30px 44px 0">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: #E3F1EC; display: flex; align-items: center; justify-content: center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+      </div>
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 26px; line-height: 1.2">Свой DNS — ты «в домике»</h1>
+    </div>
+    <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5A6470">DNS — это телефонная книга интернета: телефон спрашивает «где сайт такой-то?», а DNS отвечает. Теперь отвечать будет твой сервер.</p>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.4">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M5 12l5 5 9-10"></path></svg>
+        <span>Реклама и слежка режутся сразу — на телефоне, компе, в приложениях</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.4">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M5 12l5 5 9-10"></path></svg>
+        <span>Провайдер не видит и не подменяет, куда ты ходишь</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.4">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M5 12l5 5 9-10"></path></svg>
+        <span>Пускает только твои устройства — чужим он не отвечает</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center; padding: 12px 14px; background: #E3F1EC; border-radius: 10px; font-size: 14px; color: #0A4F44">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A4F44" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M11 18h2"></path></svg>
+      <span>Настройка на телефоне — одна строчка. Программы не нужны.</span>
+    </div>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
+    <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Дальше →</button>
+  </div>
+</div></section>
+<section class="screen" id="screen-3" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 3 из 7">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 26px 44px 0">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Какая нейронка тебе нужна?</h1>
+      <p style="margin: 0; font-size: 14px; color: #5A6470">От этого зависит, какой сервер брать. Тыкни карточку.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+      <button style="display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:16px 18px;min-height:186px;box-sizing:border-box;border-radius:12px;font-family:Manrope,sans-serif;color:#18212B;text-align:left;background:#EEF2FD;border:2px solid #1D4ED8;">
+        <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 17px; color: #1E3A8A">Gemini</span>
+        <span style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.35; text-align: left">
+          <span>✓ Встроен в Android — без приложений</span>
+          <span>✓ Смотрит YouTube и пересказывает</span>
+          <span>✓ Подписка дешевле</span>
+          <span style="color: #9A4A0A; font-weight: 700">! Капризный: нужен проверенный сервер</span>
+        </span>
+      </button>
+      <button style="display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:16px 18px;min-height:186px;box-sizing:border-box;border-radius:12px;font-family:Manrope,sans-serif;color:#18212B;text-align:left;background:#FFFFFF;border:1px solid #E4E1DA;">
+        <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 17px; color: #0A4F44">ChatGPT / Claude</span>
+        <span style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.35; text-align: left">
+          <span>✓ Умнее как отдельное приложение</span>
+          <span>✓ Работают почти с любого сервера</span>
+          <span style="color: #5A6470">— Подписка дороже</span>
+        </span>
+      </button>
+    </div>
+    <button style="height:44px;border-radius:10px;font-family:Manrope,sans-serif;font-size:15px;font-weight:500;color:#18212B;background:#FFFFFF;border:1px solid #E4E1DA;">Не знаю — мне всё равно</button>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
+    <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Дальше →</button>
+  </div>
+</div></section>
+<section class="screen" id="screen-4" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 4 из 7">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 28px 44px 0">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: #E6EEF8; display: flex; align-items: center; justify-content: center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"></path></svg>
+      </div>
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Telegram через свой прокси</h1>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; background: #ECF6F2; border-radius: 12px">
+        <span style="font-weight: 700; font-size: 15px; color: #0A4F44">Работает</span>
+        <span style="font-size: 15px; line-height: 1.6">Сообщения<br>Фото и видео<br>Кружки<br>Голосовые</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; background: #FDF1E4; border-radius: 12px">
+        <span style="font-weight: 700; font-size: 15px; color: #9A4A0A">Не работает</span>
+        <span style="font-size: 15px; line-height: 1.6">Звонки<br>Видеозвонки</span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; color: #5A6470">
+      <span><b style="color: #18212B">Почему без звонков:</b> звонок в Telegram идёт отдельной дорогой, мимо прокси, напрямую к серверам звонков — а их режут.</span>
+      <span>Нужны звонки — включай VPN, прокси тут не поможет.</span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center; padding: 12px 14px; background: #E3F1EC; border-radius: 10px; font-size: 14px; color: #0A4F44">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A4F44" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1"></path><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"></path></svg>
+      <span>Подключение — одна ссылка: нажал, и Telegram подключился сам.</span>
+    </div>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
+    <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Дальше →</button>
+  </div>
+</div></section>
+<section class="screen" id="screen-5" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 5 из 7">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; padding: 28px 44px 0">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: #E3F1EC; display: flex; align-items: center; justify-content: center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"></rect><rect x="3" y="13" width="18" height="7" rx="2"></rect><path d="M7 7.5h.01M7 16.5h.01"></path></svg>
+      </div>
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Сервер</h1>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; background: #EEF2FD; border: 1px solid #C9D6F5; border-radius: 12px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg>
+      <span style="font-size: 15px; line-height: 1.5">Для <b>Gemini</b> нужен проверенный сервер — он капризный к адресам.<br>Проверено: <b>AdminVPS</b>, Италия или Нидерланды.</span>
+    </div>
+    <p style="margin: 0; font-size: 13px; color: #5A6470">Для ChatGPT / Claude подойдёт любой сервер за границей.</p>
+    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+      <span style="font-weight: 700">Что нужно от сервера:</span>
+      <span>• Ubuntu 22 или 24, от 1 ГБ памяти</span>
+      <span>• Хостер пришлёт IP, логин и пароль — держи их под рукой</span>
+    </div>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
+    <div style="display: flex; gap: 12px">
+      <button style="height: 44px; padding: 0 18px; border: 1px solid #0E6B5C; border-radius: 10px; background: #FFFFFF; color: #0E6B5C; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Где купить?</button>
+      <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Сервер есть →</button>
+    </div>
+  </div>
+</div></section>
+<section class="screen" id="screen-6" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 6 из 7">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; padding: 28px 44px 0">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Свой бот в Telegram</h1>
+      <p style="margin: 0; font-size: 14px; color: #5A6470">Через него ты будешь всем управлять. Создать — минута.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">1</span>
+        <span style="font-size: 15px">В Telegram найди <b>@BotFather</b> (с синей галочкой)</span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">2</span>
+        <span style="font-size: 15px">Напиши ему <b>/newbot</b></span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">3</span>
+        <span style="font-size: 15px">Придумай имя, а потом адрес — латиницей, в конце <b>bot</b></span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">4</span>
+        <span style="font-size: 15px">Он пришлёт токен — длинную строку</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #FFFFFF; border: 1px dashed #D9D5CC; border-radius: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 15px; color: #5A6470">1234567890:AAH…<span style="margin-left: auto; font-family: 'Manrope', sans-serif; font-size: 13px">так выглядит токен</span></div>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
+    <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Токен есть →</button>
+  </div>
+</div></section>
+<section class="screen" id="screen-7" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <div style="display: flex; gap: 6px" aria-label="Шаг 7 из 7">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+      <span style="width: 22px; height: 6px; border-radius: 3px; background: #0E6B5C"></span>
+    </div>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; padding: 30px 44px 0">
+    <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Последнее перед стартом</h1>
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; background: #FDF1E4; border-radius: 12px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A4A0A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px"><path d="M12 3l10 18H2z"></path><path d="M12 10v4M12 17h.01"></path></svg>
+      <span style="font-size: 15px; line-height: 1.5"><b>Госуслуги</b> иногда не открываются со своим DNS (Сбер работает). Тогда на телефоне: Частный DNS → «Автоматически», сделай дела — и включи обратно.</span>
+    </div>
+    <label style="display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; background: #FFFFFF; border: 1px solid #E4E1DA; border-radius: 12px; cursor: pointer">
+      <input id="consent" type="checkbox" style="width: 22px; height: 22px; margin: 1px 0 0; flex-shrink: 0; accent-color: #0E6B5C">
+      <span style="font-size: 15px; line-height: 1.5">Понимаю: программа бесплатная и без гарантий. Ответственность за свой сервер, домен и то, как я их использую, — на мне. В рамках законов своей страны.</span>
+    </label>
+    <p style="margin: 0; font-size: 13px; color: #5A6470">Весь код открыт: <a href="https://github.com/ln71v/kombain">github.com/ln71v/kombain</a></p>
+  </div>
+  <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
+    <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
+    <button style="height:44px;padding:0 28px;border:0;border-radius:10px;font-family:Manrope,sans-serif;font-size:15px;font-weight:700;color:#FFFFFF;background:#0E6B5C;">Начать</button>
+  </div>
+</div></section>
+<section class="screen" id="screen-8" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <span class="caption">Установка</span>
+  </div>
+<div class="content"><h1>Вход на сервер</h1><p class="caption">Введи данные, которые прислал хостер.</p>
+<form id="login-form" autocomplete="off"><label>IP сервера<input id="host" type="text" placeholder="Например, 203.0.113.10" autocomplete="off" spellcheck="false" required></label>
+<div class="fields"><label>Логин<input id="user" value="root" autocomplete="off" spellcheck="false" required></label><label>Пароль<input id="password" type="password" autocomplete="off" required></label></div></form>
+<p class="caption">Пароль нигде не сохраняется</p><div class="fingerprint" data-fingerprint hidden></div><div id="login-error" class="message" role="status" hidden></div></div><div class="footer"><button class="secondary" data-go="7">← Назад</button><button id="login-submit" form="login-form" type="submit" class="primary">Войти →</button></div></div></section>
+<section class="screen" id="screen-9" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <span class="caption">Установка</span>
+  </div>
+<div class="content"><h1>Токен бота</h1><p class="caption">Вставь длинную строку, которую прислал @BotFather.</p><form id="token-form" autocomplete="off"><label>Токен<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="1234567890:AAH…" required></label></form><p class="caption">Токен передаётся на сервер через защищённое SSH-соединение.</p><div class="fingerprint" data-fingerprint hidden></div><div id="token-error" class="message" role="status" hidden></div></div><div class="footer"><button class="secondary" data-go="8">← Назад</button><button id="token-submit" form="token-form" type="submit" class="primary">Установить →</button></div></div></section>
+<section class="screen" id="screen-10" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <span class="caption">Установка</span>
+  </div>
+<div class="content"><h1>Ставлю Комбайн</h1><p class="caption">Пару минут — дальше всё в Telegram.</p><div class="steps"><div><span id="step-1">✔</span> На сервере</div><div><span id="step-2">◌</span> Ставлю Комбайн</div><div><span id="step-3">○</span> Запускаю бота</div></div><div class="fingerprint" data-fingerprint hidden></div><details id="details"><summary>Подробнее</summary><pre id="server-log" aria-label="Лог сервера"></pre></details><div id="install-error" class="message" role="status" hidden></div></div><div class="footer"><span class="caption" id="install-status">Установка идёт…</span><button id="retry-install" class="primary" hidden>Попробовать ещё раз</button></div></div></section>
+<section class="screen" id="screen-11" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M8 9h8M8 12h8M8 15h5"></path></svg>
+      <span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em">Комбайн</span>
+    </div>
+    <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #0A4F44; font-weight: 700"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>Бот поставлен</span>
+  </div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 32px 44px 0">
+    <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 22px; line-height: 1.2; text-align: center">Последний шаг — отдай боту код</h1>
+    <div style="display: flex; gap: 8px">
+      <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-0">–</span>
+      <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-1">–</span>
+      <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-2">–</span>
+      <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-3">–</span>
+      <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-4">–</span>
+      <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-5">–</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px; align-self: stretch; padding: 0 40px">
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 14px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">1</span>
+        <span style="font-size: 15px">Открой в Telegram <b><span id="bot-name"></span></b></span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 14px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">2</span>
+        <span style="font-size: 15px">Внизу нажми большую кнопку <b>«ЗАПУСТИТЬ»</b> — без неё писать нельзя</span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: center">
+        <span style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 14px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">3</span>
+        <span style="font-size: 15px">Набери код и отправь</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #5A6470">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path></svg>
+      <span id="wait-status">Жду код… Кто пришлёт — того бот и слушается.</span>
+    </div>
+  <div id="wait-error" class="message" role="status" hidden></div><button id="retry-wait" class="secondary" hidden>Попробовать ещё раз</button><button id="close-final" class="primary" hidden>Закрыть</button></div>
+</div></section>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let page=1,choice='gemini',localBusy=false,lastPhase='',lastLog='';
+function show(n){document.querySelectorAll('.screen').forEach((s,i)=>s.hidden=i+1!==n);page=n;}
+function message(id,text){$(id).textContent=text;$(id).hidden=!text;}
+function bridge(name,...args){if(typeof window[name]!=='function')return Promise.reject(new Error('Запусти интерфейс через Комбайн.exe.'));return window[name](...args);}
+function errorText(e){return typeof e==='string'?e:(e?.message||'Не получилось выполнить шаг. Попробуй ещё раз.');}
+function selectAI(value){choice=value;const cards=$('screen-3').querySelectorAll('button');cards[0].style.background=value==='gemini'?'#EEF2FD':'#FFFFFF';cards[0].style.border=value==='gemini'?'2px solid #1D4ED8':'1px solid #E4E1DA';cards[1].style.background=value==='other'?'#E3F1EC':'#FFFFFF';cards[1].style.border=value==='other'?'2px solid #0E6B5C':'1px solid #E4E1DA';cards[2].style.background=value==='any'?'#E3F1EC':'#FFFFFF';cards[2].style.border=value==='any'?'2px solid #0E6B5C':'1px solid #E4E1DA';const box=$('screen-5').querySelector('span[style*="font-size: 15px; line-height: 1.5"]');box.innerHTML=value==='gemini'?'Для <b>Gemini</b> нужен проверенный сервер — он капризный к адресам.<br>Проверено: <b>AdminVPS</b>, Италия или Нидерланды.':value==='other'?'Для <b>ChatGPT / Claude</b> подойдёт любой сервер за границей.':'Если пока не определился, бери проверенный сервер для <b>Gemini</b>.<br>Проверено: <b>AdminVPS</b>, Италия или Нидерланды.';}
+for(let n=1;n<=7;n++){
+ $('screen-'+n).querySelectorAll('button').forEach(b=>{
+ const t=b.textContent.trim();
+ if(t==='Выход')b.onclick=()=>bridge('closeWindow').catch(()=>{});
+ else if(t==='← Назад')b.onclick=()=>show(n-1);
+ else if(['Дальше →','Сервер есть →','Токен есть →'].includes(t))b.onclick=()=>show(n+1);
+ else if(t==='Начать'){b.id='start';b.disabled=true;b.onclick=()=>{if($('consent').checked)show(8);};}
+ else if(t==='Где купить?')b.onclick=()=>{const p=$('screen-5').querySelector('p');p.textContent='Для Gemini: AdminVPS, Италия или Нидерланды. Адрес хостера: adminvps.ru';};
+ });
+}
+const aiButtons=$('screen-3').querySelectorAll('button');
+aiButtons[0].onclick=()=>selectAI('gemini');aiButtons[1].onclick=()=>selectAI('other');aiButtons[2].onclick=()=>selectAI('any');
+$('consent').onchange=()=>{$('start').disabled=!$('consent').checked;};
+// Ссылки дизайна остаются видимыми, но не открывают внешние страницы из приложения.
+document.querySelectorAll('a').forEach(a=>a.onclick=e=>{e.preventDefault();});
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(Number(b.dataset.go)));
+$('login-form').onsubmit=async e=>{
+ e.preventDefault();if(localBusy)return;localBusy=true;message('login-error','');$('login-submit').disabled=true;
+ let pass=$('password').value;$('password').value='';
+ try{await bridge('loginServer',$('host').value,$('user').value,pass);lastPhase='';}
+ catch(err){message('login-error',errorText(err));$('login-submit').textContent='Попробовать ещё раз';$('login-submit').disabled=false;}
+ finally{pass='';localBusy=false;}
+};
+$('token-form').onsubmit=async e=>{
+ e.preventDefault();if(localBusy)return;localBusy=true;message('token-error','');$('token-submit').disabled=true;
+ let token=$('token').value;$('token').value='';
+ try{await bridge('installBot',token);show(10);lastPhase='';}
+ catch(err){message('token-error',errorText(err));}
+ finally{token='';localBusy=false;$('token-submit').disabled=false;}
+};
+$('retry-install').onclick=()=>{show(9);message('token-error','Скопируй токен ещё раз и повтори установку.');$('token-submit').textContent='Попробовать ещё раз';};
+$('retry-wait').onclick=async()=>{try{await bridge('retryOwner');lastPhase='';}catch(e){message('wait-error',errorText(e));}};
+$('close-final').onclick=()=>bridge('closeWindow').catch(()=>{});
+function render(s){
+ document.querySelectorAll('[data-fingerprint]').forEach(el=>{el.textContent=s.fingerprint?'Отпечаток сервера: '+s.fingerprint:'';el.hidden=!s.fingerprint;});
+ $('login-submit').disabled=s.phase==='connecting';
+ if(s.phase==='connecting')$('login-submit').textContent='Захожу на сервер…';
+ if(s.phase==='login' && s.error){message('login-error',s.error);$('login-submit').textContent='Попробовать ещё раз';}
+ if(s.log!==lastLog){const pre=$('server-log'),bottom=pre.scrollHeight-pre.scrollTop-pre.clientHeight<30;pre.textContent=s.log;lastLog=s.log;if(bottom)pre.scrollTop=pre.scrollHeight;}
+ for(let i=1;i<=3;i++)$('step-'+i).textContent=s.step>=i?'✔':i===s.step+1?'◌':'○';
+ message('install-error',s.phase==='install-error'?s.error:'');$('retry-install').hidden=s.phase!=='install-error';
+ $('install-status').textContent=s.phase==='install-error'?'Установка остановилась':s.step===3?'Бот поставлен':'Установка идёт…';
+ if(s.code){[...s.code].forEach((d,i)=>$('digit-'+i).textContent=d);$('bot-name').textContent='@'+s.bot;}
+ const waitProblem=['wait-error','timeout'].includes(s.phase);
+ message('wait-error',waitProblem?s.error:'');$('retry-wait').hidden=!waitProblem;$('close-final').hidden=s.phase!=='done';
+ $('wait-status').textContent=s.phase==='done'?'✔ Бот твой! Можно закрывать':waitProblem?'Ожидание приостановлено.':'Жду код… Кто пришлёт — того бот и слушается.';
+ if(s.phase!==lastPhase){
+  if(s.phase==='token'){show(9);$('login-submit').textContent='Войти →';}
+  if(['installing','launching','install-error'].includes(s.phase))show(10);
+  if(['waiting','done','wait-error','timeout'].includes(s.phase))show(11);
+  lastPhase=s.phase;
+ }
+}
+async function poll(){try{if(typeof window.installerState==='function')render(await bridge('installerState'));}finally{setTimeout(poll,350);}}
+poll();
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('keydown',e=>{if(e.key==='F5'||e.key==='F12'||(e.ctrlKey&&['r','R','p','P','s','S','+','-','0'].includes(e.key)))e.preventDefault();});
+</script></body></html>
