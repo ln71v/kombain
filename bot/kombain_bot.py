@@ -7,7 +7,7 @@
 
 Установка идёт в два этапа:
   1. Сбор — всё нужное складываем в «Сейф» (домен, записи, ключ, имя телефона).
-     Сейф переживает что угодно: закрыл чат, вернулся завтра — всё на месте.
+     Сейф переживает что угодно: можно закрыть чат и вернуться завтра.
   2. Одна кнопка «Устанавливай» — и ждёшь.
 """
 import json
@@ -40,7 +40,7 @@ state = {}               # chat -> {"step": ...} — чего ждём от по
 records_ok = {}          # домен -> True, когда записи в Cloudflare проверены
 busy = threading.Lock()  # одна долгая операция за раз
 
-SAFE_WARN = ("⚠️ Как только пришлёшь — я сразу удалю твоё сообщение из чата. "
+SAFE_WARN = ("⚠️ Как только сообщение придёт — я сразу удалю твоё сообщение из чата. "
              "Не пугайся, что оно пропало: так надо, чтобы ключ не висел в переписке. "
              "Он уже лежит в сейфе.")
 
@@ -176,7 +176,7 @@ def safe_screen(chat):
 
     text = ("🔐 <b>Сейф — сюда собираем всё для установки</b>\n"
             "Сначала собираем по пунктам. Потом одна кнопка — и ждёшь.\n"
-            "Закрыл чат, вернулся завтра — всё собранное на месте.\n\n"
+            "Можно закрыть чат и вернуться завтра — собранное никуда не денется.\n\n"
             f"{mark(domain)} 1. Домен{': ' + esc(domain) if domain else ''}\n"
             f"{mark(rec)} 2. Две записи в Cloudflare{'' if domain else ' (сначала домен)'}\n"
             f"{mark(has_key)} 3. API-ключ Cloudflare{': ' + esc(safe['cloudflare']) if has_key else ''}\n"
@@ -209,12 +209,12 @@ def safe_screen(chat):
 def safe_help(chat, what):
     if what == "buy":
         send(chat, kb_text("text-buy"))
-        send(chat, kb_text("text-cf"), inline([btn("✅ Купил, домен Active — положить", "safe:put:domain")], TO_SAFE))
+        send(chat, kb_text("text-cf"), inline([btn("✅ Домен куплен и Active — положить", "safe:put:domain")], TO_SAFE))
     elif what == "rec":
         ip = aip_info().get("server_ip", "")
-        send(chat, kb_text("text-records", ip), inline([btn("✅ Сделал — проверить", "safe:chk")], TO_SAFE))
+        send(chat, kb_text("text-records", ip), inline([btn("✅ Готово — проверить", "safe:chk")], TO_SAFE))
     elif what == "key":
-        send(chat, kb_text("text-token"), inline([btn("✅ Скопировал — положить", "safe:put:cf")], TO_SAFE))
+        send(chat, kb_text("text-token"), inline([btn("✅ Ключ скопирован — положить", "safe:put:cf")], TO_SAFE))
 
 
 PUT_ASK = {
@@ -235,7 +235,7 @@ def safe_put(chat, what, text, msg_id):
     if what == "cf":
         delete(chat, msg_id)
         code, out = kb("secrets", "set-cf", env={"KB_CF_TOKEN": t}, timeout=60)
-        send(chat, "🔐 Сообщение удалила" + (", ключ проверен и лежит в сейфе." if code == 0 else "."))
+        send(chat, "🔐 Сообщение удалено" + (", ключ проверен и лежит в сейфе." if code == 0 else "."))
     elif what == "domain":
         code, out = kb("secrets", "set-domain", t, timeout=30)
         records_ok.clear()
@@ -282,12 +282,12 @@ def safe_go(chat):
             send_pre(chat, "\n".join(out.splitlines()[-30:]), "❌ Установка не прошла. Последние строки:",
                      inline([btn("🚀 Попробовать снова", "safe:go")], TO_SAFE))
             return
-        send_pre(chat, "\n".join(out.splitlines()[-12:]), "✅ Готово, брат!")
+        send_pre(chat, "\n".join(out.splitlines()[-12:]), "✅ Готово!")
         _, how = kb("aiproxy", "howto", safe["client"], timeout=60)
         send_pre(chat, how, "📲 Как подключить")
         ai_screen(chat)
 
-    run_long(chat, "Ставлю. Жди, брат, 2–5 минут — я сам напишу. Можешь налить ещё.", job)
+    run_long(chat, "Ставлю. Это 2–5 минут — напишу, как закончу. Можно пока налить чаю.", job)
 
 
 # ───────────────────────── Нейронки ─────────────────────────
@@ -410,7 +410,7 @@ def on_message(m):
         return
     if text == "/cancel":
         state.pop(chat, None)
-        send(chat, "Отменил.", MAIN_KB)
+        send(chat, "Отменено.", MAIN_KB)
         return
     screens = {B_AI: ai_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
                B_HELP: lambda c: send(c, HELP, MAIN_KB)}
@@ -437,7 +437,7 @@ def on_callback(q):
         pass
     if data == "cancel":
         state.pop(chat, None)
-        send(chat, "Отменил.", MAIN_KB)
+        send(chat, "Отменено.", MAIN_KB)
     elif data.startswith("safe:"):
         safe_callback(chat, data)
     elif data.startswith("aip:"):
