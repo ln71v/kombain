@@ -61,8 +61,10 @@ bot_install() {
   local code; code=$(shuf -i 100000-999999 -n 1)
   bot_install_core "$token" 0 "$code" || return 1
   say ""
-  say "${C_BOLD}Последний шаг: открой в Telegram @$name, нажми «Запустить»"
-  say "и отправь ему код:  $code${C_RESET}"
+  say "${C_BOLD}Последний шаг:"
+  say "  1. Открой в Telegram @$name"
+  say "  2. Внизу нажми большую кнопку «ЗАПУСТИТЬ» (START) — без неё писать боту нельзя"
+  say "  3. В появившемся поле набери код:  $code  и отправь${C_RESET}"
   say "Кто пришлёт код — того бот и слушается. Больше никого."
 }
 
