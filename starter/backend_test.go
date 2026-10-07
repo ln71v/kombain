@@ -251,3 +251,12 @@ func TestProxyErrorFinishes(t *testing.T) {
 		t.Fatalf("окно не узнало об ошибке: %s / %q", s.Phase, s.Log)
 	}
 }
+
+func TestLoginHostWithPort(t *testing.T) {
+	for _, bad := range []string{"1.2.3.4:0", "1.2.3.4:70000", "1.2.3.4:abc", "host.ru"} {
+		a := newInstaller()
+		if a.login(bad, "root", "x") == nil {
+			t.Fatalf("плохой адрес принят: %s", bad)
+		}
+	}
+}

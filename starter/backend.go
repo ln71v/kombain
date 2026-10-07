@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -96,10 +98,17 @@ func (a *installer) login(host, user, pass string) error {
 		user = "root"
 	}
 	// IP-адрес, как в форме; IPv6 тоже поддерживается.
-	if net.ParseIP(strings.Trim(host, "[]")) == nil {
-		return errors.New("Введи IP сервера, который прислал хостер.")
+	// Можно «IP» или «IP:порт» — у кого провайдер режет 22-й.
+	if h, port, err := net.SplitHostPort(host); err == nil && net.ParseIP(h) != nil {
+		if n, e := strconv.Atoi(port); e != nil || n < 1 || n > 65535 {
+			return errors.New("Порт — число от 1 до 65535. Пример: 203.0.113.10:49222")
+		}
+		host = net.JoinHostPort(h, port)
+	} else if net.ParseIP(strings.Trim(host, "[]")) != nil {
+		host = strings.Trim(host, "[]")
+	} else {
+		return errors.New("Введи IP сервера, который прислал хостер. Если SSH не на 22-м порту — через двоеточие: 203.0.113.10:49222")
 	}
-	host = strings.Trim(host, "[]")
 	if pass == "" {
 		return errors.New("Введи пароль от сервера.")
 	}
@@ -429,7 +438,27 @@ func (a *installer) installProxy() error {
 				}
 			})
 		}}
+		note := func(f string, v ...interface{}) { log.Write([]byte("· " + fmt.Sprintf(f, v...) + "\n")) }
+		note("Отправляю команду на сервер")
+		stop := make(chan struct{})
+		go func() { // раз в 20 секунд — «жива, жду», чтобы было видно, что программа не зависла
+			start := time.Now()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-time.After(20 * time.Second):
+					note("Жду ответ сервера, прошло %d с", int(time.Since(start).Seconds()))
+				}
+			}
+		}()
 		out, err := runTimeout(c, proxyCommand, log, 10*time.Minute)
+		close(stop)
+		if err != nil {
+			note("Сервер закончил с ошибкой: %v", err)
+		} else {
+			note("Сервер ответил, разбираю ответ")
+		}
 		log.flush()
 		tg, web, qr, ok := parseProxy(lastLine(out))
 		if err != nil || !ok {
