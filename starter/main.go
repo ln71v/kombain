@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"runtime"
 	"time"
 
@@ -48,6 +49,15 @@ func main() {
 		{"installBot", a.install},
 		{"installerState", func() (Snapshot, error) { return a.snapshot(), nil }},
 		{"retryOwner", a.retryWait},
+		{"installProxy", a.installProxy},
+		{"openProxy", func() error {
+			link, err := a.proxyLink()
+			if err != nil {
+				return err
+			}
+			// Открывает Telegram Desktop: он сам спросит «Подключить прокси?»
+			return exec.Command("rundll32", "url.dll,FileProtocolHandler", link).Start()
+		}},
 		{"closeWindow", func() error { w.Dispatch(func() { w.Terminate() }); return nil }},
 	}
 	for _, b := range bindings {

@@ -166,3 +166,27 @@ func TestInputsAndClosedState(t *testing.T) {
 		t.Fatal("stale state accepted")
 	}
 }
+
+func TestParseProxy(t *testing.T) {
+	sec := "ee" + strings.Repeat("ab", 20)
+	good := `{"tg":"tg://proxy?server=46.30.46.238&port=9443&secret=` + sec + `","web":"https://t.me/proxy?server=46.30.46.238&port=9443&secret=` + sec + `","qr":"PHN2Zz4="}`
+	tg, web, qr, ok := parseProxy(good)
+	if !ok || !strings.HasPrefix(tg, "tg://") || !strings.HasPrefix(web, "https://t.me/") || qr != "PHN2Zz4=" {
+		t.Fatalf("хороший ответ не принят: %v %q %q %q", ok, tg, web, qr)
+	}
+	bad := []string{
+		``, `не json`,
+		`{"tg":"tg://proxy?server=1.2.3.4&port=9443&secret=` + sec + `&x=1","web":"https://t.me/proxy?server=1.2.3.4&port=9443&secret=` + sec + `"}`,
+		`{"tg":"javascript:alert(1)","web":"https://t.me/proxy?server=1.2.3.4&port=9443&secret=` + sec + `"}`,
+		`{"tg":"tg://proxy?server=1.2.3.4&port=9443&secret=` + sec + `","web":"https://evil.com/proxy?server=1.2.3.4&port=9443&secret=` + sec + `"}`,
+	}
+	for _, b := range bad {
+		if _, _, _, ok := parseProxy(b); ok {
+			t.Fatalf("плохой ответ принят: %s", b)
+		}
+	}
+	// битая картинка не мешает ссылке
+	if _, _, qr, ok := parseProxy(strings.Replace(good, `"PHN2Zz4="`, `"<svg onload=x>"`, 1)); !ok || qr != "" {
+		t.Fatal("битая картинка должна отбрасываться, ссылка — оставаться")
+	}
+}
