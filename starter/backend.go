@@ -47,6 +47,7 @@ type Snapshot struct {
 	ProxyTG     string `json:"proxyTG"`
 	ProxyWeb    string `json:"proxyWeb"`
 	ProxyQR     string `json:"proxyQR"`
+	ErrKind     string `json:"errKind"` // "noconnect" — до сервера не достучаться (порт 22)
 }
 
 type installer struct {
@@ -137,7 +138,8 @@ func (a *installer) login(host, user, pass string) error {
 			case strings.Contains(err.Error(), "unable to authenticate"):
 				msg = "Неверный логин или пароль. Давай ещё раз."
 			case errors.As(err, &nerr) || strings.Contains(err.Error(), "connect"):
-				msg = "Сервер не отвечает. Проверь IP и что сервер включён в панели хостера. Всё верно — попробуй раздать интернет с телефона: домашний провайдер иногда режет вход на сервер, мобильный обычно нет."
+				msg = "Сервер не отвечает."
+				a.update(g, func(s *Snapshot) { s.ErrKind = "noconnect" })
 			}
 			a.finish(g, "login", msg)
 			return
