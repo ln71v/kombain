@@ -290,10 +290,11 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
       </div>
     </div>
     <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #FFFFFF; border: 1px dashed #D9D5CC; border-radius: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 15px; color: #5A6470">1234567890:AAH…<span style="margin-left: auto; font-family: 'Manrope', sans-serif; font-size: 13px">так выглядит токен</span></div>
+    <div style="font-size: 14px; line-height: 1.5; color: #5A6470">⚠️ Telegram не грузится? Жми «пропустить» — сразу после входа на сервер поставлю прокси для Telegram, а бота создашь потом, в том же окне.</div>
   </div>
   <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
     <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
-    <button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Токен есть →</button>
+    <span style="display:flex;gap:10px"><button id="skip-bot" class="secondary">Telegram не грузится — пропустить</button><button style="height: 44px; padding: 0 24px; border: 0; border-radius: 10px; background: #0E6B5C; color: #FFFFFF; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700">Токен есть →</button></span>
   </div>
 </div></section>
 <section class="screen" id="screen-7" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
@@ -349,7 +350,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
     </div>
     <span class="caption">Установка</span>
   </div>
-<div class="content"><h1>Токен бота</h1><p class="caption">Вставь длинную строку, которую прислал @BotFather.</p><form id="token-form" autocomplete="off"><label>Токен<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="1234567890:AAH…" required></label></form><p class="caption">Токен передаётся на сервер через защищённое SSH-соединение.</p><div class="fingerprint" data-fingerprint hidden></div><div id="token-error" class="message" role="status" hidden></div></div><div class="footer"><button class="secondary" data-go="12">← Назад</button><button id="token-submit" form="token-form" type="submit" class="primary">Установить →</button></div></div></section>
+<div class="content"><h1>Токен бота</h1><p class="caption">Вставь длинную строку, которую прислал @BotFather.<br>Ещё нет токена? В Telegram: <b>@BotFather</b> → <b>/newbot</b> → имя → адрес латиницей с <b>bot</b> в конце → скопируй токен.</p><form id="token-form" autocomplete="off"><label>Токен<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="1234567890:AAH…" required></label></form><p class="caption">Токен передаётся на сервер через защищённое SSH-соединение.</p><div class="fingerprint" data-fingerprint hidden></div><div id="token-error" class="message" role="status" hidden></div></div><div class="footer"><button class="secondary" data-go="12">← Назад</button><button id="token-submit" form="token-form" type="submit" class="primary">Установить →</button></div></div></section>
 <section class="screen" id="screen-10" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
   <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
     <div style="display: flex; align-items: center; gap: 10px">
@@ -469,6 +470,7 @@ $('retry-wait').onclick=async()=>{try{await bridge('retryOwner');lastPhase='';}c
 $('close-final').onclick=()=>bridge('closeWindow').catch(()=>{});
 function tgView(v){$('tg-ask').hidden=v!=='ask';$('tg-wait').hidden=v!=='wait';$('tg-ready').hidden=v!=='ready';$('tg-next').hidden=v!=='ready';$('proxy-open').hidden=v!=='ready';$('tg-back').hidden=v==='wait';if(v!=='wait')$('retry-proxy').hidden=true;}
 $('tg-yes').onclick=()=>show(9);
+$('skip-bot').onclick=()=>show(7);
 $('tg-no').onclick=async()=>{message('proxy-error','');tgView('wait');try{await bridge('installProxy');lastPhase='';}catch(e){message('proxy-error',errorText(e));$('retry-proxy').hidden=false;}};
 $('retry-proxy').onclick=()=>$('tg-no').onclick();
 $('tg-back').onclick=()=>{if(!$('tg-ask').hidden)show(8);else tgView('ask');};
