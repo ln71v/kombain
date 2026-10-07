@@ -107,7 +107,7 @@ func (a *installer) login(host, user, pass string) error {
 	} else if net.ParseIP(strings.Trim(host, "[]")) != nil {
 		host = strings.Trim(host, "[]")
 	} else {
-		return errors.New("Введи IP сервера, который прислал хостер. Если SSH не на 22-м порту — через двоеточие: 203.0.113.10:49222")
+		return errors.New("Введи IP сервера, который прислал хостер.")
 	}
 	if pass == "" {
 		return errors.New("Введи пароль от сервера.")
@@ -137,7 +137,7 @@ func (a *installer) login(host, user, pass string) error {
 			case strings.Contains(err.Error(), "unable to authenticate"):
 				msg = "Неверный логин или пароль. Давай ещё раз."
 			case errors.As(err, &nerr) || strings.Contains(err.Error(), "connect"):
-				msg = "Сервер не отвечает. Проверь IP и что сервер включён в панели хостера."
+				msg = "Сервер не отвечает. Проверь IP и что сервер включён в панели хостера. Всё верно — попробуй раздать интернет с телефона: домашний провайдер иногда режет вход на сервер, мобильный обычно нет."
 			}
 			a.finish(g, "login", msg)
 			return
