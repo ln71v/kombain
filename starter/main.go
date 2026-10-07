@@ -50,6 +50,7 @@ func main() {
 		{"installerState", func() (Snapshot, error) { return a.snapshot(), nil }},
 		{"retryOwner", a.retryWait},
 		{"installProxy", a.installProxy},
+		{"needLogin", func() (bool, error) { return a.needLogin(), nil }},
 		{"openProxy", func() error {
 			link, err := a.proxyLink()
 			if err != nil {
