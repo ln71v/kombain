@@ -94,6 +94,12 @@ func TestSSHInstallerProtocol(t *testing.T) {
 						fmt.Fprintln(channel, `{"bot":"test_kombain_bot","code":"012345"}`)
 					case ownerCommand:
 						fmt.Fprintln(channel, "12345")
+					case proxyCommand:
+						for i := 0; i < 50; i++ {
+							fmt.Fprintln(channel.Stderr(), "▶ Ставлю пакеты: qrencode", i)
+						}
+						_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{1}))
+						return
 					}
 					_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
 					return
@@ -188,5 +194,60 @@ func TestParseProxy(t *testing.T) {
 	// битая картинка не мешает ссылке
 	if _, _, qr, ok := parseProxy(strings.Replace(good, `"PHN2Zz4="`, `"<svg onload=x>"`, 1)); !ok || qr != "" {
 		t.Fatal("битая картинка должна отбрасываться, ссылка — оставаться")
+	}
+}
+
+func TestProxyErrorFinishes(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := ssh.NewSignerFromKey(priv)
+	config := &ssh.ServerConfig{NoClientAuth: true}
+	config.AddHostKey(signer)
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer l.Close()
+	go func() {
+		conn, e := l.Accept()
+		if e != nil {
+			return
+		}
+		_, chans, reqs, e := ssh.NewServerConn(conn, config)
+		if e != nil {
+			return
+		}
+		go ssh.DiscardRequests(reqs)
+		for ch := range chans {
+			channel, requests, _ := ch.Accept()
+			go func() {
+				defer channel.Close()
+				for req := range requests {
+					_ = req.Reply(req.Type == "exec", nil)
+					if req.Type != "exec" {
+						continue
+					}
+					for i := 0; i < 50; i++ {
+						fmt.Fprintln(channel.Stderr(), "▶ строка", i)
+					}
+					_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{1}))
+					return
+				}
+			}()
+		}
+	}()
+	c, err := connect(l.Addr().String(), "root", "x", func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := newInstaller()
+	a.client = c
+	defer a.close()
+	if err := a.installProxy(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && a.snapshot().Phase == "proxy-installing" {
+		time.Sleep(10 * time.Millisecond)
+	}
+	s := a.snapshot()
+	if s.Phase != "proxy-error" || !strings.Contains(s.Log, "строка 49") {
+		t.Fatalf("окно не узнало об ошибке: %s / %q", s.Phase, s.Log)
 	}
 }
