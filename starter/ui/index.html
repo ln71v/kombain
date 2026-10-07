@@ -415,7 +415,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
 </div></div>
 <div id="tg-wait" hidden><h1>Ставлю прокси для Telegram</h1><p class="caption">Около минуты. Домен и регистрации не нужны.</p>
 <details><summary>Подробнее</summary><pre id="proxy-log" aria-label="Лог сервера"></pre></details>
-<div id="proxy-error" class="message" role="status" hidden></div></div>
+<div id="proxy-slow" class="caption" hidden>Что-то долго. Если за 10 минут не закончится — само остановится и предложит попробовать ещё раз.</div><div id="proxy-error" class="message" role="status" hidden></div></div>
 <div id="tg-ready" hidden><h1>Прокси готов</h1>
 <div style="display:flex;gap:18px;align-items:flex-start">
 <img id="proxy-qr" alt="QR-код прокси" style="width:150px;height:150px;flex-shrink:0;background:#FFF;border:1px solid #E4E1DA;border-radius:10px" hidden>
@@ -468,11 +468,12 @@ $('token-form').onsubmit=async e=>{
 $('retry-install').onclick=()=>{show(9);message('token-error','Скопируй токен ещё раз и повтори установку.');$('token-submit').textContent='Попробовать ещё раз';};
 $('retry-wait').onclick=async()=>{try{await bridge('retryOwner');lastPhase='';}catch(e){message('wait-error',errorText(e));}};
 $('close-final').onclick=()=>bridge('closeWindow').catch(()=>{});
-function tgView(v){$('tg-ask').hidden=v!=='ask';$('tg-wait').hidden=v!=='wait';$('tg-ready').hidden=v!=='ready';$('tg-next').hidden=v!=='ready';$('proxy-open').hidden=v!=='ready';$('tg-back').hidden=v==='wait';if(v!=='wait')$('retry-proxy').hidden=true;}
+function tgView(v,err){$('tg-ask').hidden=v!=='ask';$('tg-wait').hidden=v!=='wait';$('tg-ready').hidden=v!=='ready';$('tg-next').hidden=v!=='ready';$('proxy-open').hidden=v!=='ready';$('tg-back').hidden=v==='wait'&&!err;$('retry-proxy').hidden=!err;$('proxy-slow').hidden=true;clearTimeout(slowTimer);if(v==='wait'&&!err)slowTimer=setTimeout(()=>{$('proxy-slow').hidden=false;},180000);}
+let slowTimer=0;
 $('tg-yes').onclick=()=>show(9);
 $('skip-bot').onclick=()=>show(7);
-$('tg-no').onclick=async()=>{message('proxy-error','');tgView('wait');try{await bridge('installProxy');lastPhase='';}catch(e){message('proxy-error',errorText(e));$('retry-proxy').hidden=false;}};
-$('retry-proxy').onclick=()=>$('tg-no').onclick();
+$('tg-no').onclick=async()=>{message('proxy-error','');tgView('wait');try{await bridge('installProxy');lastPhase='';}catch(e){message('proxy-error',errorText(e));tgView('wait',true);}};
+$('retry-proxy').onclick=async()=>{let relog=false;try{relog=await bridge('needLogin');}catch(e){}if(relog){show(8);message('login-error','Связь оборвалась. Введи пароль ещё раз и снова выбери «Нет, не грузится».');}else $('tg-no').onclick();};
 $('tg-back').onclick=()=>{if(!$('tg-ask').hidden)show(8);else tgView('ask');};
 $('tg-next').onclick=()=>show(9);
 $('proxy-open').onclick=async()=>{message('open-error','');try{await bridge('openProxy');}catch(e){message('open-error','Не открылось. Telegram Desktop стоит? Если нет — скопируй ссылку или отсканируй QR телефоном.');}};
@@ -493,7 +494,7 @@ function render(s){
  if(s.phase!==lastPhase){
   if(s.phase==='telegram'){show(12);tgView('ask');$('login-submit').textContent='Войти →';}
   if(s.phase==='proxy-installing'){show(12);tgView('wait');}
-  if(s.phase==='proxy-error'){show(12);tgView('wait');message('proxy-error',s.error);$('retry-proxy').hidden=false;}
+  if(s.phase==='proxy-error'){show(12);tgView('wait',true);message('proxy-error',s.error);}
   if(s.phase==='proxy-ready'){show(12);tgView('ready');$('proxy-web').value=s.proxyWeb;const q=$('proxy-qr');if(/^[A-Za-z0-9+/]+={0,2}$/.test(s.proxyQR||'')){q.src='data:image/svg+xml;base64,'+s.proxyQR;q.hidden=false;}else q.hidden=true;}
   if(['installing','launching','install-error'].includes(s.phase))show(10);
   if(['waiting','done','wait-error','timeout'].includes(s.phase))show(11);

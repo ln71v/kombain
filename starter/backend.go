@@ -187,7 +187,51 @@ func connect(host, user, pass string, fingerprint func(string)) (*ssh.Client, er
 		return nil, err
 	}
 	_ = conn.SetDeadline(time.Time{})
-	return ssh.NewClient(cc, chans, reqs), nil
+	c := ssh.NewClient(cc, chans, reqs)
+	go keepAlive(c)
+	return c, nil
+}
+
+// keepAlive проверяет связь каждые 15 секунд. Сервер не ответил дважды подряд —
+// закрываем соединение: зависшая команда вернёт ошибку, и окно предложит повторить,
+// а не будет висеть вечно.
+func keepAlive(c *ssh.Client) {
+	misses := 0
+	for {
+		time.Sleep(15 * time.Second)
+		done := make(chan error, 1)
+		go func() { _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); done <- err }()
+		select {
+		case err := <-done:
+			if err != nil {
+				return // соединение уже закрыто
+			}
+			misses = 0
+		case <-time.After(15 * time.Second):
+			misses++
+			if misses >= 2 {
+				_ = c.Close()
+				return
+			}
+		}
+	}
+}
+
+// runTimeout — как run, но не дольше limit: потом сессия закрывается.
+func runTimeout(c *ssh.Client, cmd string, log io.Writer, limit time.Duration) (string, error) {
+	type res struct {
+		out string
+		err error
+	}
+	ch := make(chan res, 1)
+	go func() { o, e := run(c, cmd, "", log); ch <- res{o, e} }()
+	select {
+	case r := <-ch:
+		return r.out, r.err
+	case <-time.After(limit):
+		_ = c.Close()
+		return "", errors.New("timeout")
+	}
 }
 
 // stdout остаётся протоколом JSON, stderr — раскрываемым журналом.
@@ -385,11 +429,20 @@ func (a *installer) installProxy() error {
 				}
 			})
 		}}
-		out, err := run(c, proxyCommand, "", log)
+		out, err := runTimeout(c, proxyCommand, log, 10*time.Minute)
 		log.flush()
 		tg, web, qr, ok := parseProxy(lastLine(out))
 		if err != nil || !ok {
-			a.finish(g, "proxy-error", "Прокси не встал. Разверни журнал ниже — там написано почему. Можно попробовать ещё раз.")
+			msg := "Прокси не встал. Разверни «Подробнее» — там написано почему. Можно попробовать ещё раз."
+			if isClosed(c) {
+				msg = "Связь с сервером оборвалась. Нажми «Попробовать ещё раз» — войду на сервер заново."
+				a.mu.Lock()
+				if a.client == c {
+					a.client = nil
+				}
+				a.mu.Unlock()
+			}
+			a.finish(g, "proxy-error", msg)
 			return
 		}
 		a.mu.Lock()
@@ -430,3 +483,19 @@ func (a *installer) proxyLink() (string, error) {
 	}
 	return a.state.ProxyTG, nil
 }
+
+// isClosed — живо ли ещё соединение.
+func isClosed(c *ssh.Client) bool {
+	done := make(chan error, 1)
+	go func() { _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); done <- err }()
+	select {
+	case err := <-done:
+		return err != nil
+	case <-time.After(10 * time.Second):
+		_ = c.Close()
+		return true
+	}
+}
+
+// needLogin — соединение оборвалось, нужен повторный вход.
+func (a *installer) needLogin() bool { a.mu.Lock(); defer a.mu.Unlock(); return a.client == nil }
