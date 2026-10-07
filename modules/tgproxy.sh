@@ -79,11 +79,15 @@ EOF
 tgp_core() {
   ensure_pkgs curl tar jq qrencode || return 1
   if tgp_installed; then
-    tgp_unit   # файл службы всегда свежий — чинит старые установки
+    # Уже работает (свой или поставленный раньше руками) — ничего не трогаем
+    tgp_running && { ok "Telegram-прокси уже стоит и работает"; return 0; }
+    # Не работает — чиним файл службы (старые установки с %d на Ubuntu 22.04)
+    backup_file "$TGP_UNIT"
+    tgp_unit
     systemctl daemon-reload
     systemctl reset-failed telegram-mtg >/dev/null 2>&1
     systemctl enable --now telegram-mtg >/dev/null 2>&1
-    sleep 1
+    sleep 2
     tgp_running && { ok "Telegram-прокси уже стоит и работает"; return 0; }
     err "Telegram-прокси стоит, но не запускается. Логи: journalctl -u telegram-mtg -n 30"
     return 1
