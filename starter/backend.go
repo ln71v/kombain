@@ -23,6 +23,16 @@ const installCommand = "command -v curl >/dev/null || { apt-get update -qq && ap
 
 const ownerCommand = "bash /opt/kombain/src/kombain.sh cli bot owner"
 
+// Telegram-прокси: для тех, у кого Telegram без VPN не грузится, — иначе до бота не дойти.
+const proxyCommand = "command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl >/dev/null; }; " +
+	"curl -fsSL " + kbURL + " -o /tmp/kombain-start.sh && bash /tmp/kombain-start.sh cli tgproxy install"
+
+var (
+	proxyTGPattern  = regexp.MustCompile(`^tg://proxy\?server=[0-9.]{7,15}&port=[0-9]{2,5}&secret=ee[0-9a-f]{20,200}$`)
+	proxyWebPattern = regexp.MustCompile(`^https://t\.me/proxy\?server=[0-9.]{7,15}&port=[0-9]{2,5}&secret=ee[0-9a-f]{20,200}$`)
+	base64Pattern   = regexp.MustCompile(`^[A-Za-z0-9+/]+={0,2}$`)
+)
+
 type Snapshot struct {
 	Phase       string `json:"phase"`
 	Error       string `json:"error"`
@@ -32,6 +42,9 @@ type Snapshot struct {
 	Bot         string `json:"bot"`
 	Code        string `json:"code"`
 	Step        int    `json:"step"`
+	ProxyTG     string `json:"proxyTG"`
+	ProxyWeb    string `json:"proxyWeb"`
+	ProxyQR     string `json:"proxyQR"`
 }
 
 type installer struct {
@@ -134,7 +147,7 @@ func (a *installer) login(host, user, pass string) error {
 		}
 		a.client = c
 		a.busy = false
-		a.state.Phase = "token"
+		a.state.Phase = "telegram"
 		a.state.Network = org
 		a.state.Step = 1
 		a.mu.Unlock()
@@ -342,4 +355,78 @@ func (a *installer) retryWait() error {
 	a.mu.Unlock()
 	go a.waitOwner(c, g)
 	return nil
+}
+
+// Ставит Telegram-прокси на сервер. Можно жать повторно: модуль на сервере
+// при уже стоящем прокси ничего не меняет и просто отдаёт ссылку.
+func (a *installer) installProxy() error {
+	a.mu.Lock()
+	if a.closed || a.busy {
+		a.mu.Unlock()
+		return errors.New("Подожди, выполняю предыдущий шаг.")
+	}
+	if a.client == nil {
+		a.mu.Unlock()
+		return errors.New("Сначала войди на сервер.")
+	}
+	c, g := a.client, a.generation
+	a.busy = true
+	a.state.Phase = "proxy-installing"
+	a.state.Error = ""
+	a.state.Log = ""
+	a.mu.Unlock()
+	go func() {
+		log := &safeLog{emit: func(t string) {
+			a.update(g, func(s *Snapshot) {
+				s.Log += t
+				r := []rune(s.Log)
+				if len(r) > 32000 {
+					s.Log = string(r[len(r)-32000:])
+				}
+			})
+		}}
+		out, err := run(c, proxyCommand, "", log)
+		log.flush()
+		tg, web, qr, ok := parseProxy(lastLine(out))
+		if err != nil || !ok {
+			a.finish(g, "proxy-error", "Прокси не встал. Разверни журнал ниже — там написано почему. Можно попробовать ещё раз.")
+			return
+		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.closed || a.generation != g {
+			return
+		}
+		a.busy = false
+		a.state.Phase = "proxy-ready"
+		a.state.ProxyTG, a.state.ProxyWeb, a.state.ProxyQR = tg, web, qr
+	}()
+	return nil
+}
+
+// parseProxy проверяет ответ сервера: только ссылки нужного вида и картинка base64.
+func parseProxy(line string) (tg, web, qr string, ok bool) {
+	var p struct {
+		TG  string `json:"tg"`
+		Web string `json:"web"`
+		QR  string `json:"qr"`
+	}
+	if json.Unmarshal([]byte(line), &p) != nil || !proxyTGPattern.MatchString(p.TG) || !proxyWebPattern.MatchString(p.Web) {
+		return "", "", "", false
+	}
+	// QR необязателен: без него остаётся ссылка.
+	if len(p.QR) > 300000 || !base64Pattern.MatchString(p.QR) {
+		p.QR = ""
+	}
+	return p.TG, p.Web, p.QR, true
+}
+
+// proxyLink отдаёт проверенную tg://-ссылку для открытия в Telegram на этом компьютере.
+func (a *installer) proxyLink() (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !proxyTGPattern.MatchString(a.state.ProxyTG) {
+		return "", errors.New("Сначала поставь прокси.")
+	}
+	return a.state.ProxyTG, nil
 }

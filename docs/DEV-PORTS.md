@@ -8,12 +8,14 @@
 - 443/udp — AmneziaWG
 - 53/tcp+udp — AdGuard, обычный DNS (пускает только ClientID из списка)
 - 853/tcp — AdGuard DoT, 853/udp — AdGuard DoQ
+- 9443/tcp — Telegram-прокси (MTProxy Fake TLS, маска www.cloudflare.com). Отдельный порт: ставится первым из exe,
+  когда nginx ещё нет. Перевод за 443 (SNI) — потом, когда будет база.
 
 ## Внутри (127.0.0.1, только через nginx)
 - 3000 — AdGuard, служебный HTTP (API установки)
 - 8443 — AdGuard HTTPS: DoH и админка (SNI .dns.<домен>)
 - 8444 — Xray VLESS Reality (SNI: свой домен или маска)
-- 8445 — Telegram-прокси
+- 8445 — Telegram-прокси за nginx (зарезервирован на будущее, сейчас прокси на 9443 снаружи)
 - 8080 — сайт-заглушка
 
 ## Проверено
