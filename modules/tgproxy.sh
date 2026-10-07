@@ -58,7 +58,8 @@ After=network-online.target
 Type=simple
 DynamicUser=yes
 LoadCredential=config.toml:/etc/telegram-mtg/config.toml
-ExecStart=/usr/local/bin/telegram-mtg run %d/config.toml
+# ${CREDENTIALS_DIRECTORY}, а не %d: %d нет в systemd Ubuntu 22.04
+ExecStart=/usr/local/bin/telegram-mtg run ${CREDENTIALS_DIRECTORY}/config.toml
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes
@@ -78,6 +79,9 @@ EOF
 tgp_core() {
   ensure_pkgs curl tar jq qrencode || return 1
   if tgp_installed; then
+    tgp_unit   # файл службы всегда свежий — чинит старые установки
+    systemctl daemon-reload
+    systemctl reset-failed telegram-mtg >/dev/null 2>&1
     systemctl enable --now telegram-mtg >/dev/null 2>&1
     sleep 1
     tgp_running && { ok "Telegram-прокси уже стоит и работает"; return 0; }
