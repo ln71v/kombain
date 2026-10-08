@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Общие ключи Комбайна. Вводятся один раз, ими пользуются все модули.
-#   Cloudflare — сертификаты (нейронки, позже VLESS с сайтом)
+#   Cloudflare — сертификаты и записи (нейронки, VLESS со своим доменом)
 #   домен     — общий для всех модулей
 # Файлы читает только root.
 
@@ -50,15 +50,17 @@ sec_cf_zone() {
   return 1
 }
 
-# sec_cf_records <имя> <ip> [force] — ставит A-записи <имя> и *.<имя> → ip, облако серое.
+# sec_cf_records <имя> <ip> [force] [only] — ставит A-записи <имя> и *.<имя> → ip, облако серое.
+# only — только сама <имя>, без *.<имя> (VLESS со своим доменом).
 # 0 — записи на месте; 3 — имя уже занято другим адресом (без force не трогаем); 1 — ошибка.
 sec_cf_records() {
-  local host="$1" ip="$2" force="${3:-}" zone name recs n id cur typ body busy=0
+  local host="$1" ip="$2" force="${3:-}" only="${4:-}" zone name recs n id cur typ body busy=0 names
   zone=$(sec_cf_zone "$host") || {
     err "Cloudflare не показывает зону для $host. Ключ сделан для другого домена или домен ещё не Active."
     return 1; }
   body=$(jq -nc --arg ip "$ip" '{type:"A", content:$ip, ttl:1, proxied:false}')
-  for name in "$host" "*.$host"; do
+  names=("$host"); [ "$only" = "only" ] || names+=("*.$host")
+  for name in "${names[@]}"; do
     recs=$(sec_cf_api GET "/zones/$zone/dns_records?name=$name")
     [ "$(jq -r '.success' <<<"$recs" 2>/dev/null)" = "true" ] || { err "Cloudflare не отдал записи для $name"; return 1; }
     n=$(jq '.result | length' <<<"$recs")

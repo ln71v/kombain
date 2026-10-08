@@ -556,7 +556,15 @@ def awg_callback(chat, data):
 # ───────────────────────── VLESS Reality ─────────────────────────
 VLS_ABOUT = ("🔑 <b>VLESS Reality</b> — VPN, который снаружи выглядит как обычный заход на большой сайт.\n"
              "Режут его реже всего: работает и там, где AmneziaWG не пускают.\n\n"
-             "Домен не нужен. Приложение: <b>Hiddify</b> или <b>Amnezia VPN</b>.")
+             "Домен не нужен. Приложение: <b>Hiddify</b> или <b>Amnezia VPN</b>.\n"
+             "Если в 🔐 Сейфе есть домен и ключ Cloudflare — сразу встанет на свой домен с сайтом-заглушкой.")
+
+VLS_DOM_ABOUT = ("🌐 <b>Свой домен</b>\n\n"
+                 "Сейчас без ключа сервер притворяется чужим сайтом ({sni}). "
+                 "Со своим доменом он будет показывать твой собственный сайт-заглушку "
+                 "с настоящим замком (сертификатом). Проверяющий увидит обычный сайт, адрес и сервер совпадают.\n\n"
+                 "Домен: <code>{dom}</code> — запись в Cloudflare и сертификат сделаю сама.\n"
+                 "⚠️ Ключи у всех устройств поменяются — QR придётся отсканировать заново.")
 
 
 def vls_screen(chat):
@@ -566,11 +574,24 @@ def vls_screen(chat):
         return
     clients = info.get("clients") or []
     state_txt = "работает ✅" if info.get("running") else "не запущен ❌"
+    dom = info.get("domain") or ""
+    mask = f"свой домен {esc(dom)}" if dom else f"маска {esc(info.get('sni', ''))}"
     send(chat, f"🔑 <b>VLESS Reality</b> — {state_txt}\n"
-               f"Сервер: <code>{esc(info.get('endpoint', ''))}:443</code>, маска {esc(info.get('sni', ''))}\n"
+               f"Сервер: <code>{esc(info.get('endpoint', ''))}:443</code>, {mask}\n"
                f"Устройства ({len(clients)}): {esc(', '.join(clients)) or 'нет'}",
          inline([btn("➕ Добавить устройство", "vls:add"), btn("📲 Ключ устройства", "vls:pick:show")],
-                [btn("📊 Состояние", "vls:status"), btn("🗑 Удалить устройство", "vls:pick:rm")]))
+                [btn("📊 Состояние", "vls:status"), btn("🗑 Удалить устройство", "vls:pick:rm")],
+                [btn("↩️ Вернуть чужую маску", "vls:domoff") if dom else btn("🌐 Свой домен", "vls:dom")]))
+
+
+def vls_after_switch(chat, out, ok_title):
+    """После смены маски: у всех устройств новый ключ — кнопки, чтобы прислать каждому."""
+    clients = kb_json("vless", "info").get("clients") or []
+    rows = [[btn(f"📲 {c}", f"vls:show:{c}")] for c in clients[:30]]
+    rows.append([btn("◀️ Назад в VLESS", "vls:menu")])
+    send_pre(chat, "\n".join(out.splitlines()[-12:]),
+             ok_title + "\nКлючи поменялись — пришли каждое устройство заново и отсканируй QR:",
+             {"inline_keyboard": rows})
 
 
 def vls_send_client(chat, name):
@@ -643,6 +664,35 @@ def vls_callback(chat, data):
         send_pre(chat, kb("vless", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово", vls_after())
     elif data == "vls:menu":
         vls_screen(chat)
+    elif data == "vls:dom":
+        safe = sec_info()
+        if not (safe.get("domain") and safe.get("cloudflare")):
+            send(chat, "🌐 Для своего домена нужны <b>домен</b> и <b>ключ Cloudflare</b> в 🔐 Сейфе. "
+                       "Заполни их и возвращайся сюда.",
+                 inline([btn("🔐 Открыть сейф", "safe:open")], [btn("◀️ Назад в VLESS", "vls:menu")]))
+            return
+        info = kb_json("vless", "info")
+        send(chat, VLS_DOM_ABOUT.format(sni=esc(info.get("sni", "")), dom=esc(safe["domain"])),
+             inline([btn("✅ Переключить", "vls:domok")], [btn("◀️ Назад в VLESS", "vls:menu")]))
+    elif data == "vls:domok":
+        def job():
+            code, out = kb("vless", "domain-on", timeout=600)
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-20:]), "❌ Не переключилось, VLESS работает как раньше:",
+                         inline([btn("🔁 Попробовать ещё раз", "vls:domok")], [btn("◀️ Назад в VLESS", "vls:menu")]))
+                return
+            vls_after_switch(chat, out, "✅ VLESS на своём домене.")
+        run_long(chat, "Делаю запись, сертификат и сайт. Пара минут.", job)
+    elif data == "vls:domoff":
+        send(chat, "↩️ Вернуть маску www.yahoo.com? Сайт-заглушка выключится.\n"
+                   "⚠️ Ключи у всех устройств поменяются.",
+             inline([btn("Да, вернуть", "vls:domoffok")], [btn("◀️ Назад в VLESS", "vls:menu")]))
+    elif data == "vls:domoffok":
+        code, out = kb("vless", "domain-off", timeout=120)
+        if code != 0:
+            send_pre(chat, out, "❌ Не получилось:", vls_after())
+            return
+        vls_after_switch(chat, out, "✅ Вернула маску.")
 
 
 # ───────────────────────── общие экраны ─────────────────────────
