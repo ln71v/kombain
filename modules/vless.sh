@@ -111,14 +111,14 @@ vls_write_conf() {
       routing: {rules: [{type: "field", outboundTag: "block",
         ip: ["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
              "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10"]}]}
-    }' >"$VLS_CONF.new"
+    }' >"$VLS_DIR/config.new.json"
   )
-  if ! "$VLS_BIN" run -test -config "$VLS_CONF.new" >/dev/null 2>&1; then
-    err "Xray не принял новый конфиг:"; "$VLS_BIN" run -test -config "$VLS_CONF.new" 2>&1 | tail -5
-    rm -f "${VLS_CONF:?}.new"; return 1
+  if ! "$VLS_BIN" run -test -config "$VLS_DIR/config.new.json" >/dev/null 2>&1; then
+    err "Xray не принял новый конфиг:"; "$VLS_BIN" run -test -config "$VLS_DIR/config.new.json" 2>&1 | tail -5
+    rm -f "${VLS_DIR:?}/config.new.json"; return 1
   fi
   [ -f "$VLS_CONF" ] && cp -a "$VLS_CONF" "$VLS_CONF.bak"
-  mv -f "$VLS_CONF.new" "$VLS_CONF"
+  mv -f "$VLS_DIR/config.new.json" "$VLS_CONF"
 }
 
 vls_restart() {
