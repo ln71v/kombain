@@ -229,6 +229,13 @@ tgu_cli() {
     qr-png)  local l; l=$(tgu_link "${1:-}") && [ -n "$l" ] || { err "Нет ссылки"; return 1; }
              qrencode -t PNG -s 6 -m 2 -o - "$l" ;;
     status)  tgu_status ;;
+    exe)
+      # Для установщика (exe): поставить и выдать ссылку admin в том же виде, что tgproxy link
+      ensure_pkgs jq qrencode >/dev/null 2>&1
+      tgu_install_core >&2 || return 1
+      local tg; tg=$(tgu_link admin) && [ -n "$tg" ] || { err "Нет ссылки admin"; return 1; }
+      jq -nc --arg tg "$tg" --arg web "https://t.me/proxy?${tg#*\?}" \
+        --arg qr "$(qrencode -t SVG -m 2 -o - "$tg" 2>/dev/null | base64 -w0)" '{tg:$tg, web:$web, qr:$qr}' ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
   esac
 }
