@@ -731,20 +731,25 @@ TGP_ABOUT = ("✈️ <b>Telegram-прокси</b> — Telegram без VPN, ко�
 
 
 def tgp_screen(chat):
-    tu = kb_json("tgusers", "info")
-    if tu.get("installed"):
-        tgu_screen(chat, tu)
-        return
-    info = kb_json("tgproxy", "info")
-    if not info.get("installed"):
-        send(chat, TGP_ABOUT, inline([btn("🚀 Установить", "tgp:install")]))
-        return
-    state_txt = "работает ✅" if info.get("running") else "остановлен ❌"
-    send(chat, f"✈️ <b>Telegram-прокси</b> — {state_txt}, порт {info.get('port', '')}\n"
-               "Ключ у него один на всех: отключить одного человека нельзя.",
-         inline([btn("🔗 Ссылка и QR", "tgp:link")],
-                [btn("👥 Поставить прокси с ключами по именам", "tgu:install")],
-                [btn("🗑 Удалить", "tgp:rm")]))
+    """Два вида прокси рядом: общая ссылка (mtg) и личные ссылки (telemt)."""
+    old, new = kb_json("tgproxy", "info"), kb_json("tgusers", "info")
+    st = lambda i: ("работает ✅" if i.get("running") else "не запущен ❌") if i.get("installed") else "не стоит"
+    text = ("✈️ <b>Telegram-прокси</b> — Telegram без VPN.\n"
+            "Работают сообщения, фото, видео, голосовые. Звонки — нет, для них нужен VPN.\n\n"
+            f"🔗 <b>Общая ссылка</b> — {st(old)}\n"
+            "Одна ссылка на всех. Проще всего, но отключить одного человека нельзя.\n\n"
+            f"👤 <b>Личные ссылки</b> — {st(new)}\n"
+            "У каждого своя ссылка: видно трафик, можно выключить одного, остальные работают.")
+    rows = []
+    if old.get("installed"):
+        rows.append([btn("🔗 Общая: ссылка и QR", "tgp:link"), btn("🗑 Убрать общую", "tgp:rm")])
+    else:
+        rows.append([btn("🔗 Поставить общую ссылку", "tgp:install")])
+    if new.get("installed"):
+        rows.append([btn("👤 Личные: список людей", "tgu:menu")])
+    else:
+        rows.append([btn("👤 Поставить личные ссылки", "tgu:install")])
+    send(chat, text, {"inline_keyboard": rows})
 
 
 # ── прокси по именам (telemt) ──
@@ -755,14 +760,15 @@ def fmt_mb(b):
 def tgu_screen(chat, info=None):
     info = info or kb_json("tgusers", "info")
     users = info.get("users") or []
-    head = (f"✈️ <b>Telegram-прокси по именам</b> — {'работает ✅' if info.get('running') else 'не запущен ❌'}, "
+    head = (f"👤 <b>Личные ссылки</b> — {'работает ✅' if info.get('running') else 'не запущен ❌'}, "
             f"порт {info.get('port', '')}\n\n"
             "Нажми на человека — ссылка, выключить, удалить.\n✅ — пускает, ⛔ — выключен.")
     rows = [[btn(f"{'✅' if u['on'] else '⛔'} {u['name']} · {fmt_mb(u.get('bytes'))}"
                  f"{' · онлайн' if u.get('conns') else ''}", f"tgu:u:{u['name']}")] for u in users[:40]]
     if not info.get("running"):
         rows.insert(0, [btn("🔧 Не запущен — переставить начисто", "tgu:install")])
-    rows += [[btn("➕ Добавить человека", "tgu:add")], [btn("🗑 Удалить прокси целиком", "tgu:rm")]]
+    rows += [[btn("➕ Добавить человека", "tgu:add")],
+             [btn("🗑 Убрать личные ссылки целиком", "tgu:rm"), btn("◀️ Назад", "tgp:menu")]]
     send(chat, head, {"inline_keyboard": rows})
 
 
@@ -818,7 +824,7 @@ def tgu_callback(chat, data):
                 return
             send_pre(chat, "\n".join(out.splitlines()[-3:]), "✅ Готово")
             tgu_screen(chat)
-        run_long(chat, "Ставлю Telegram-прокси по именам. Это минута.", job)
+        run_long(chat, "Ставлю личные ссылки. Это минута.", job)
     elif data == "tgu:menu":
         tgu_screen(chat)
     elif data == "tgu:add":
@@ -847,7 +853,7 @@ def tgu_callback(chat, data):
         kb("tgusers", "del", data.split(":", 2)[2], timeout=30)
         tgu_screen(chat)
     elif data == "tgu:rm":
-        send(chat, "🗑 Удалить Telegram-прокси по именам целиком? Перестанут работать ссылки у всех.",
+        send(chat, "🗑 Убрать личные ссылки целиком? Перестанут работать ссылки у всех людей из списка.",
              inline([btn("Да, удалить", "tgu:rmok")], [btn("◀️ Назад", "tgu:menu")]))
     elif data == "tgu:rmok":
         send_pre(chat, kb("tgusers", "remove", timeout=60)[1], "🗑 Готово")
@@ -882,7 +888,7 @@ def tgp_callback(chat, data):
     elif data == "tgp:link":
         tgp_send_link(chat)
     elif data == "tgp:rm":
-        send(chat, "🗑 Удалить Telegram-прокси? Ссылка перестанет работать у всех, кому ты её давал.",
+        send(chat, "🗑 Убрать общую ссылку? Она перестанет работать у всех, кому ты её давал.",
              inline([btn("Да, удалить", "tgp:rmok")], CANCEL))
     elif data == "tgp:rmok":
         send_pre(chat, kb("tgproxy", "remove", timeout=60)[1], "🗑 Готово")
