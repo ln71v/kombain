@@ -37,7 +37,7 @@ awg_versions() {
   printf 'модуль %s, утилиты %s' "${m:-нет}" "${t:-нет}"
 }
 awg_version_ok() {
-  modinfo -F version amneziawg 2>/dev/null | grep -q '^3\.1' && awg --version 2>/dev/null | grep -q 'v3\.1'
+  grep -q '^3\.1' <<<"$(modinfo -F version amneziawg 2>/dev/null)" && grep -q 'v3\.1' <<<"$(awg --version 2>/dev/null)"
 }
 
 awg_wan_if() { ip -4 route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'; }
@@ -146,7 +146,7 @@ awg_install_core() {
   owner=$(port_owner "$AWG_PORT" udp)
   [ -n "$owner" ] && { err "Порт $AWG_PORT/udp уже занят: $owner"; return 1; }
   ip link show "$AWG_IF" >/dev/null 2>&1 && { err "Интерфейс $AWG_IF уже есть — его поднял кто-то другой."; return 1; }
-  ip -4 addr | grep -q "inet $AWG_NET\." && { err "Подсеть $AWG_NET.0/24 уже занята на сервере."; return 1; }
+  grep -q "inet $AWG_NET\." <<<"$(ip -4 addr)" && { err "Подсеть $AWG_NET.0/24 уже занята на сервере."; return 1; }
   wan=$(awg_wan_if); [ -n "$wan" ] || { err "Не нашла сетевую карту с выходом в интернет."; return 1; }
 
   awg_get_pkgs || return 1
@@ -171,7 +171,7 @@ awg_install_core() {
   ok "Сервер AmneziaWG работает на $AWG_ENDPOINT:$AWG_PORT/udp"
 
   fw_register awg "$AWG_PORT/udp"
-  if ufw status 2>/dev/null | grep -q '^Status: active'; then fw_apply; fi
+  if grep -q '^Status: active' <<<"$(ufw status 2>/dev/null)"; then fw_apply; fi
 }
 
 # ───────────────────────── клиенты ─────────────────────────

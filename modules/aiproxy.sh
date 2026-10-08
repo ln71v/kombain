@@ -317,7 +317,7 @@ aip_start_adguard() {
     sleep 2
   done
   [ "$ready" -eq 1 ] || { err "AdGuard не поднялся после настройки. Логи: docker logs $AIP_C_AGH"; return 1; }
-  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -qE '^(0\.0\.0\.0|\*|\[::\]):3000$'; then
+  if grep -qE '^(0\.0\.0\.0|\*|\[::\]):3000$' <<<"$(ss -H -ltn 2>/dev/null | awk '{print $4}')"; then
     err "Админка AdGuard осталась видна снаружи на порту 3000 — дальше не иду"
     return 1
   fi
