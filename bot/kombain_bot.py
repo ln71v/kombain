@@ -43,7 +43,9 @@ def read_version():
 VERSION = read_version()
 
 B_AI, B_SAFE, B_SERVER, B_HELP = "🧠 Нейронки", "🔐 Сейф", "📊 Сервер", "❓ Помощь"
-MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_SAFE}], [{"text": B_SERVER}, {"text": B_HELP}]],
+B_AWG = "🛡 AmneziaWG"
+MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_AWG}], [{"text": B_SAFE}, {"text": B_SERVER}],
+                        [{"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
 CLIENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -87,6 +89,21 @@ def send_pre(chat, text, title="", markup=None):
     send(chat, (f"{title}\n" if title else "") + f"<pre>{esc(text)}</pre>", markup)
 
 
+def send_file(chat, method, field, filename, data, caption="", ctype="application/octet-stream"):
+    """Отправить файл (документ или картинку) — multipart вручную, только стандартная библиотека."""
+    b = "kombain" + os.urandom(8).hex()
+    parts = []
+    for k, v in (("chat_id", str(chat)), ("caption", caption[:1000])):
+        parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
+                 f"Content-Type: {ctype}\r\n\r\n".encode() + data + b"\r\n")
+    parts.append(f"--{b}--\r\n".encode())
+    req = urllib.request.Request(f"{API}/{method}", data=b"".join(parts),
+                                 headers={"Content-Type": f"multipart/form-data; boundary={b}"})
+    with urllib.request.urlopen(req, timeout=70) as r:
+        return json.load(r)
+
+
 def delete(chat, msg_id):
     try:
         call("deleteMessage", chat_id=chat, message_id=msg_id)
@@ -125,6 +142,16 @@ def kb(*args, env=None, timeout=900):
         return r.returncode, (r.stdout + r.stderr).strip()
     except subprocess.TimeoutExpired:
         return 124, "Команда не уложилась по времени."
+
+
+def kb_raw(*args, timeout=60):
+    """То же, но вывод байтами (картинка QR)."""
+    try:
+        r = subprocess.run([KB, "cli", *args], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL,
+                           env={k: v for k, v in os.environ.items() if k != "BOT_TOKEN"})
+        return r.returncode, r.stdout
+    except subprocess.TimeoutExpired:
+        return 124, b""
 
 
 def kb_json(*args):
@@ -431,6 +458,88 @@ def safe_callback(chat, data):
         safe_go(chat)
 
 
+# ───────────────────────── AmneziaWG ─────────────────────────
+AWG_ABOUT = ("🛡 <b>AmneziaWG 3.1</b> — VPN для телефона и компа. Весь интернет идёт через сервер.\n\n"
+             "Ставится без Docker, одной кнопкой. Для каждого устройства — свой файл и QR-код.\n"
+             "Приложение: <b>Amnezia VPN</b> версии 5.0.1.5 или новее (Android, iPhone, Windows, Mac).")
+
+
+def awg_screen(chat):
+    info = kb_json("awg", "info")
+    if not info.get("installed"):
+        send(chat, AWG_ABOUT, inline([btn("🚀 Установить", "awg:install")]))
+        return
+    clients = info.get("clients") or []
+    state_txt = "работает ✅" if info.get("running") else "не запущен ❌"
+    send(chat, f"🛡 <b>AmneziaWG 3.1</b> — {state_txt}\n"
+               f"Сервер: <code>{esc(info.get('endpoint', ''))}</code>\n"
+               f"Устройства ({len(clients)}): {esc(', '.join(clients)) or 'нет'}",
+         inline([btn("➕ Добавить устройство", "awg:add"), btn("📲 Ключ устройства", "awg:pick:show")],
+                [btn("📊 Состояние", "awg:status"), btn("🗑 Удалить устройство", "awg:pick:rm")]))
+
+
+def awg_send_client(chat, name):
+    code, conf = kb("awg", "conf", name, timeout=30)
+    if code != 0:
+        send(chat, "❌ " + esc(last_line(conf)))
+        return
+    qcode, png = kb_raw("awg", "qr-png", name)
+    if qcode == 0 and png:
+        send_file(chat, "sendPhoto", "photo", f"{name}.png", png,
+                  f"QR для «{name}»: Amnezia VPN → «+» → «QR-код»", "image/png")
+    send_file(chat, "sendDocument", "document", f"{name}.conf", conf.encode() + b"\n",
+              "Или этот файл: Amnezia VPN → «+» → «Файл с настройками».\n"
+              "Никому не пересылай — это ключ от твоего VPN.")
+
+
+def awg_add(chat, text):
+    state.pop(chat, None)
+    name = text.strip().lower()
+    if not CLIENT_RE.match(name):
+        send(chat, "Только маленькие латинские буквы, цифры и дефис.", inline([btn("Ещё раз", "awg:add")]))
+        return
+    code, out = kb("awg", "add-client", name, timeout=60)
+    if code != 0:
+        send_pre(chat, out, "❌ Не добавилось")
+        return
+    awg_send_client(chat, name)
+
+
+def awg_callback(chat, data):
+    if data == "awg:install":
+        def job():
+            code, out = kb("awg", "install", timeout=1200,
+                           env={"KB_SERVER_IP": aip_info().get("server_ip", "")})
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-25:]), "❌ Не встало. Последние строки:",
+                         inline([btn("🚀 Попробовать снова", "awg:install")]))
+                return
+            send(chat, "✅ AmneziaWG работает. Теперь добавь устройство.",
+                 inline([btn("➕ Добавить устройство", "awg:add")]))
+        run_long(chat, "Ставлю AmneziaWG. Это 2–5 минут — собирается модуль ядра.", job)
+    elif data == "awg:add":
+        state[chat] = {"step": "awg_add"}
+        send(chat, "📱 Как назвать устройство? Латиницей, например <code>vasya-phone</code>.\n"
+                   "Это подпись в списке — чтобы отличать телефон, ноут, мамин.", inline(CANCEL))
+    elif data == "awg:status":
+        send_pre(chat, kb("awg", "status", timeout=60)[1], "📊 AmneziaWG")
+    elif data.startswith("awg:pick:"):
+        what = data.split(":")[2]
+        clients = kb_json("awg", "info").get("clients") or []
+        if not clients:
+            send(chat, "Устройств нет. Жми «➕ Добавить устройство».")
+            return
+        send(chat, "Какое устройство?", {"inline_keyboard": [[btn(c, f"awg:{what}:{c}")] for c in clients[:30]]})
+    elif data.startswith("awg:show:"):
+        awg_send_client(chat, data.split(":", 2)[2])
+    elif data.startswith("awg:rm:"):
+        name = data.split(":", 2)[2]
+        send(chat, f"🗑 Удалить «{esc(name)}»? Этот ключ сразу перестанет работать.",
+             inline([btn("Да, удалить", f"awg:rmok:{name}")], CANCEL))
+    elif data.startswith("awg:rmok:"):
+        send_pre(chat, kb("awg", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово")
+
+
 # ───────────────────────── общие экраны ─────────────────────────
 def server_screen(chat):
     cmd = ("echo \"IP: $(curl -4 -fs --max-time 5 https://api.ipify.org)\"; "
@@ -445,8 +554,9 @@ def server_screen(chat):
 HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS.\n"
         "🔐 <b>Сейф</b> — место сбора: сюда складываешь всё для установки, потом одна кнопка.\n"
+        "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
-        "Скоро здесь же: VLESS, AmneziaWG, WARP, Telegram-прокси.\n\n"
+        "Скоро здесь же: VLESS, WARP, Telegram-прокси.\n\n"
         "Отменить любой шаг — /cancel.")
 
 
@@ -461,7 +571,7 @@ def on_message(m):
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
         return
-    screens = {B_AI: ai_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
+    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
                B_HELP: lambda c: send(c, HELP, MAIN_KB)}
     if text in screens:
         state.pop(chat, None)
@@ -473,6 +583,8 @@ def on_message(m):
         safe_put(chat, step[4:], text, m["message_id"])
     elif step == "aip_add":
         ai_add_client(chat, text)
+    elif step == "awg_add":
+        awg_add(chat, text)
     else:
         send(chat, "Выбирай кнопкой внизу 👇", MAIN_KB)
 
@@ -491,6 +603,8 @@ def on_callback(q):
         safe_callback(chat, data)
     elif data.startswith("aip:"):
         ai_callback(chat, data)
+    elif data.startswith("awg:"):
+        awg_callback(chat, data)
 
 
 def claim(m):
