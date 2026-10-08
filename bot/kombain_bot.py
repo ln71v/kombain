@@ -6,7 +6,8 @@
 Только стандартная библиотека Python.
 
 Установка идёт в два этапа:
-  1. Сбор — всё нужное складываем в «Сейф» (домен, записи, ключ, имя телефона).
+  1. Сбор — всё нужное складываем в «Сейф» (домен, ключ, имя телефона).
+     Записи в Cloudflare бот делает сам по ключу.
      Сейф переживает что угодно: можно закрыть чат и вернуться завтра.
   2. Одна кнопка «Устанавливай» — и ждёшь.
 """
@@ -29,6 +30,17 @@ KB_SRC = os.environ.get("KB_SRC", "/opt/kombain/src")
 KB = os.path.join(KB_SRC, "kombain.sh")
 LOG_DIR = "/opt/kombain/logs"
 API = f"https://api.telegram.org/bot{TOKEN}"
+
+
+def read_version():
+    try:
+        with open(os.path.join(KB_SRC, "VERSION")) as f:
+            return "v" + f.read().strip()
+    except OSError:
+        return "v?"
+
+
+VERSION = read_version()
 
 B_AI, B_SAFE, B_SERVER, B_HELP = "🧠 Нейронки", "🔐 Сейф", "📊 Сервер", "❓ Помощь"
 MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_SAFE}], [{"text": B_SERVER}, {"text": B_HELP}]],
@@ -165,33 +177,57 @@ def check_records(domain, ip):
     return code == 0, out
 
 
+def make_records(chat, force=False):
+    """Сами ставим записи в Cloudflare ключом из сейфа. True — записи на месте."""
+    safe = sec_info()
+    domain = safe.get("domain")
+    if not (domain and safe.get("cloudflare")):
+        return False
+    ip = aip_info().get("server_ip", "")
+    code, out = kb("aiproxy", "make-dns", *(["--force"] if force else []),
+                   env={"KB_SERVER_IP": ip}, timeout=90)
+    if code == 0:
+        records_ok[domain] = True
+        send_pre(chat, out, "🌐 Записи в Cloudflare сделала сама:")
+        return True
+    if code == 3:
+        send_pre(chat, out, "⚠️ Эти имена в Cloudflare уже заняты другим адресом. "
+                            f"Перезаписать на этот сервер ({esc(ip)})?",
+                 inline([btn("✅ Да, перезаписать", "safe:mk:force")],
+                        [btn("Сделаю руками", "safe:h:rec")], TO_SAFE))
+        return False
+    send_pre(chat, out, "❌ Записи сама сделать не смогла:",
+             inline([btn("🔁 Попробовать ещё раз", "safe:mk")], [btn("Сделаю руками", "safe:h:rec")], TO_SAFE))
+    return False
+
+
 def safe_screen(chat):
     state.pop(chat, None)
     safe, info = sec_info(), aip_info()
-    ip = info.get("server_ip", "")
     domain = safe.get("domain")
-    rec = check_records(domain, ip)[0] if domain else False
+    rec = bool(records_ok.get(domain)) if domain else False
     has_key, client = bool(safe.get("cloudflare")), safe.get("client")
     mark = lambda ok: "✅" if ok else "⬜"
 
     text = ("🔐 <b>Сейф — сюда собираем всё для установки</b>\n"
-            "Сначала собираем по пунктам. Потом одна кнопка — и ждёшь.\n"
+            "Три пункта. Потом одна кнопка — и ждёшь.\n"
             "Можно закрыть чат и вернуться завтра — собранное никуда не денется.\n\n"
             f"{mark(domain)} 1. Домен{': ' + esc(domain) if domain else ''}\n"
-            f"{mark(rec)} 2. Две записи в Cloudflare{'' if domain else ' (сначала домен)'}\n"
-            f"{mark(has_key)} 3. API-ключ Cloudflare{': ' + esc(safe['cloudflare']) if has_key else ''}\n"
-            f"{mark(client)} 4. Имя твоего телефона{': ' + esc(client) if client else ''}\n")
+            f"{mark(has_key)} 2. Ключ Cloudflare{': ' + esc(safe['cloudflare']) if has_key else ''}\n"
+            f"{mark(client)} 3. Имя твоего телефона{': ' + esc(client) if client else ''}\n"
+            f"{mark(rec)} Записи в Cloudflare — сделаю сама"
+            f"{'' if domain and has_key else ' (нужны домен и ключ)'}\n")
     rows = []
     if not domain:
         rows += [[btn("1️⃣ Как купить домен", "safe:h:buy")], [btn("1️⃣ Положить домен", "safe:put:domain")]]
-    if domain and not rec:
-        rows += [[btn("2️⃣ Что сделать в Cloudflare", "safe:h:rec")], [btn("2️⃣ Проверить записи", "safe:chk")]]
     if not has_key:
-        rows += [[btn("3️⃣ Где взять ключ", "safe:h:key")], [btn("3️⃣ Положить ключ", "safe:put:cf")]]
+        rows += [[btn("2️⃣ Где взять ключ", "safe:h:key")], [btn("2️⃣ Положить ключ", "safe:put:cf")]]
     if not client:
-        rows += [[btn("4️⃣ Назвать phone", "safe:client:phone"), btn("4️⃣ Своё имя", "safe:put:client")]]
+        rows += [[btn("3️⃣ Назвать phone", "safe:client:phone"), btn("3️⃣ Своё имя", "safe:put:client")]]
+    if domain and has_key and not rec:
+        rows += [[btn("🌐 Сделать записи", "safe:mk")]]
 
-    ready = domain and rec and has_key and client
+    ready = domain and has_key and client
     if info.get("installed"):
         text += "\n🧠 Нейронки уже стоят."
     elif ready:
@@ -245,6 +281,8 @@ def safe_put(chat, what, text, msg_id):
         send(chat, "❌ " + esc(last_line(out)), inline([btn("Попробовать ещё раз", f"safe:put:{what}")], TO_SAFE))
         return
     send(chat, "📦 " + esc(last_line(out)))
+    if what in ("domain", "cf"):
+        make_records(chat)
     safe_screen(chat)
 
 
@@ -271,6 +309,8 @@ def safe_go(chat):
         return
     if not (safe.get("domain") and safe.get("cloudflare") and safe.get("client")):
         safe_screen(chat)
+        return
+    if not records_ok.get(safe["domain"]) and not make_records(chat):
         return
 
     def job():
@@ -378,6 +418,10 @@ def safe_callback(chat, data):
         safe_put(chat, "client", data.split(":", 2)[2], None)
     elif data == "safe:chk":
         safe_check(chat)
+    elif data == "safe:mk":
+        make_records(chat) and safe_screen(chat)
+    elif data == "safe:mk:force":
+        make_records(chat, force=True) and safe_screen(chat)
     elif data == "safe:go":
         safe_go(chat)
 
@@ -393,7 +437,7 @@ def server_screen(chat):
     send_pre(chat, out, "📊 <b>Сервер</b>")
 
 
-HELP = ("🤖 <b>Пульт Комбайна</b>\n\n"
+HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS.\n"
         "🔐 <b>Сейф</b> — место сбора: сюда складываешь всё для установки, потом одна кнопка.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
@@ -406,7 +450,7 @@ def on_message(m):
     text = m.get("text") or ""
     if text in ("/start", "/menu"):
         state.pop(chat, None)
-        send(chat, "Привет! Я пульт твоего сервера. Выбирай внизу 👇", MAIN_KB)
+        send(chat, f"Привет! Я пульт твоего сервера. Комбайн {VERSION}.\nВыбирай внизу 👇", MAIN_KB)
         return
     if text == "/cancel":
         state.pop(chat, None)
