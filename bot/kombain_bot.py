@@ -43,8 +43,9 @@ def read_version():
 VERSION = read_version()
 
 B_AI, B_SAFE, B_SERVER, B_HELP = "🧠 Нейронки", "🔐 Сейф", "📊 Сервер", "❓ Помощь"
-B_AWG, B_VLS = "🛡 AmneziaWG", "🔑 VLESS"
-MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_VLS}, {"text": B_AWG}], [{"text": B_SAFE}, {"text": B_SERVER}],
+B_AWG, B_VLS, B_WARP = "🛡 AmneziaWG", "🔑 VLESS", "🌐 WARP"
+MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_VLS}, {"text": B_AWG}],
+                        [{"text": B_WARP}, {"text": B_SAFE}, {"text": B_SERVER}],
                         [{"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
@@ -656,6 +657,72 @@ def server_screen(chat):
              inline([btn("🔄 Обновить Комбайн", "upd:ask")]))
 
 
+# ───────────────────────── WARP ─────────────────────────
+WARP_ABOUT = ("🌐 <b>WARP</b> — выход в интернет через Cloudflare, а не с адреса сервера.\n\n"
+              "Зачем: сайты видят адрес Cloudflare. Помогает, когда сайт не пускает адрес сервера, "
+              "и прячет сервер от лишних глаз.\n"
+              "Включается по устройствам: кому-то через WARP, кому-то напрямую. Для VLESS и AmneziaWG.")
+PROTO = {"vless": "VLESS", "awg": "AmneziaWG"}
+
+
+def warp_screen(chat):
+    info = kb_json("warp", "info")
+    if not info.get("installed"):
+        send(chat, WARP_ABOUT, inline([btn("🚀 Установить", "warp:install")]))
+        return
+    devs = info.get("devices") or []
+    head = (f"🌐 <b>WARP</b> — {'работает ✅' if info.get('up') else 'не поднят ❌'}"
+            f"{', выход ' + esc(info['ip']) if info.get('ip') else ''}\n\n")
+    if not devs:
+        send(chat, head + "Устройств пока нет — добавь их в 🔑 VLESS или 🛡 AmneziaWG.", warp_tail())
+        return
+    rows = [[btn(f"{'✅' if d['on'] else '⬜'} {d['name']} · {PROTO.get(d['proto'], d['proto'])}",
+                 f"warp:t:{d['proto']}:{d['name']}:{'off' if d['on'] else 'on'}")] for d in devs[:40]]
+    send(chat, head + "Нажми на устройство, чтобы переключить.\n✅ — через WARP, ⬜ — напрямую.",
+         {"inline_keyboard": rows + warp_tail()["inline_keyboard"]})
+
+
+def warp_tail():
+    return inline([btn("✅ Всех через WARP", "warp:all:on"), btn("⬜ Всех напрямую", "warp:all:off")],
+                  [btn("📊 Состояние", "warp:status"), btn("🔁 Новый ключ WARP", "warp:reissue")],
+                  [btn("🗑 Удалить WARP", "warp:rm")])
+
+
+def warp_callback(chat, data):
+    if data == "warp:install":
+        def job():
+            code, out = kb("warp", "install", timeout=600)
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-20:]), "❌ Не встало. Последние строки:",
+                         inline([btn("🚀 Попробовать снова", "warp:install")]))
+                return
+            send_pre(chat, "\n".join(out.splitlines()[-4:]), "✅ WARP готов")
+            warp_screen(chat)
+        run_long(chat, "Ставлю WARP. Это минута.", job)
+    elif data.startswith("warp:t:"):
+        _, _, proto, name, want = data.split(":", 4)
+        code, out = kb("warp", want, proto, name, timeout=60)
+        if code != 0:
+            send_pre(chat, out, "❌ Не переключилось")
+        warp_screen(chat)
+    elif data.startswith("warp:all:"):
+        kb("warp", "all-" + data.split(":")[2], timeout=90)
+        warp_screen(chat)
+    elif data == "warp:status":
+        send_pre(chat, kb("warp", "status", timeout=60)[1], "📊 WARP", inline([btn("◀️ Назад в WARP", "warp:menu")]))
+    elif data == "warp:reissue":
+        run_long(chat, "Перевыпускаю ключ WARP…",
+                 lambda: (send_pre(chat, kb("warp", "reissue", timeout=180)[1], "🔁 Готово"), warp_screen(chat)))
+    elif data == "warp:rm":
+        send(chat, "🗑 Удалить WARP? Все устройства пойдут напрямую, ключи VPN останутся.",
+             inline([btn("Да, удалить", "warp:rmok")], CANCEL))
+    elif data == "warp:rmok":
+        send_pre(chat, kb("warp", "remove", timeout=120)[1], "🗑 Готово")
+        warp_screen(chat)
+    elif data == "warp:menu":
+        warp_screen(chat)
+
+
 # ───────────────────────── обновление Комбайна ─────────────────────────
 UPD_FLAG = "/opt/kombain/bot/updated"   # кому сказать «готово» после перезапуска
 
@@ -702,8 +769,9 @@ HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🔐 <b>Сейф</b> — место сбора: сюда складываешь всё для установки, потом одна кнопка.\n"
         "🔑 <b>VLESS</b> — VPN под видом обычного сайта, режут реже всего.\n"
         "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
+        "🌐 <b>WARP</b> — выход через Cloudflare: включаешь по устройствам.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
-        "Скоро здесь же: WARP, Telegram-прокси.\n\n"
+        "Скоро здесь же: Telegram-прокси.\n\n"
         "Обновить Комбайн — /update или «📊 Сервер» → «🔄 Обновить».\n"
         "Отменить любой шаг — /cancel.")
 
@@ -722,7 +790,7 @@ def on_message(m):
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
         return
-    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_VLS: vls_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
+    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_VLS: vls_screen, B_WARP: warp_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
                B_HELP: lambda c: send(c, HELP, MAIN_KB)}
     if text in screens:
         state.pop(chat, None)
@@ -762,6 +830,8 @@ def on_callback(q):
         vls_callback(chat, data)
     elif data.startswith("upd:"):
         upd_callback(chat, data)
+    elif data.startswith("warp:"):
+        warp_callback(chat, data)
 
 
 def claim(m):
