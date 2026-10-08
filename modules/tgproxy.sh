@@ -155,6 +155,11 @@ tgp_status() {
 tgp_remove() {
   tgp_installed || { warn "Telegram-прокси не установлен."; return 0; }
   confirm "Удалить Telegram-прокси? Ссылка перестанет работать у всех" || return 0
+  tgp_remove_core
+}
+# Без вопросов — для бота (он спрашивает сам)
+tgp_remove_core() {
+  tgp_installed || { warn "Telegram-прокси не установлен."; return 0; }
   systemctl disable --now telegram-mtg >/dev/null 2>&1
   rm -f "$TGP_UNIT"
   systemctl daemon-reload
@@ -197,6 +202,16 @@ tgp_cli() {
       jq -nc --arg tg "$(tgp_link_tg)" --arg web "$(tgp_link_web)" --arg qr "$(tgp_qr_svg | base64 -w0)" \
         '{tg:$tg, web:$web, qr:$qr}' ;;
     status) tgp_running && echo running || echo stopped ;;
+    info)
+      if tgp_installed; then
+        jq -nc --argjson run "$(tgp_running && echo true || echo false)" --arg web "$(tgp_link_web)" \
+          --argjson port "$TGP_PORT" '{installed:true, running:$run, web:$web, port:$port}'
+      else
+        jq -nc '{installed:false}'
+      fi ;;
+    qr-png) tgp_installed || { err "Telegram-прокси не установлен."; return 1; }
+            qrencode -t PNG -s 6 -m 2 -o - "$(tgp_link_tg)" ;;
+    remove) tgp_remove_core ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
   esac
 }
