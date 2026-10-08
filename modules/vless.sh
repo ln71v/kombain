@@ -94,9 +94,16 @@ EOF
 vls_write_conf() {
   local listen port
   if [ "$VLS_MODE" = "behind" ]; then listen="127.0.0.1"; port=$VLS_INNER; else listen="0.0.0.0"; port=443; fi
+  # Кому WARP: имена из $KB_HOME/warp/users (модуль warp). Нет WARP — пустой список.
+  local warp_on=false warp_users='[]'
+  if [ -r "$KB_HOME/warp/warp.conf" ]; then
+    warp_on=true
+    warp_users=$(awk '$1=="vless"{print $2}' "$KB_HOME/warp/users" 2>/dev/null | jq -R . | jq -sc .)
+  fi
   ( umask 077
     jq -n --arg listen "$listen" --argjson port "$port" --arg sni "$VLS_SNI" --arg priv "$VLS_PRIV" \
-      --arg sid "$VLS_SID" --slurpfile cl "$VLS_DIR/clients.json" '
+      --arg sid "$VLS_SID" --slurpfile cl "$VLS_DIR/clients.json" \
+      --argjson warp "$warp_on" --argjson wu "$warp_users" '
     {
       log: {loglevel: "warning"},
       inbounds: [{
@@ -107,10 +114,14 @@ vls_write_conf() {
           realitySettings: {target: ($sni + ":443"), serverNames: [$sni], privateKey: $priv, shortIds: [$sid]}},
         sniffing: {enabled: true, destOverride: ["http", "tls", "quic"]}
       }],
-      outbounds: [{protocol: "freedom", tag: "direct"}, {protocol: "blackhole", tag: "block"}],
-      routing: {rules: [{type: "field", outboundTag: "block",
+      outbounds: ([{protocol: "freedom", tag: "direct"}, {protocol: "blackhole", tag: "block"}]
+        + (if $warp then [{protocol: "freedom", tag: "warp",
+             settings: {domainStrategy: "UseIPv4"}, streamSettings: {sockopt: {mark: 119}}}] else [] end)),
+      routing: {rules: ([{type: "field", outboundTag: "block",
         ip: ["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
-             "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10"]}]}
+             "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10"]}]
+        + ([$cl[0][].name] as $all | ($wu | map(select(. as $u | $all | index($u)))) as $u
+           | if $warp and ($u | length) > 0 then [{type: "field", user: $u, outboundTag: "warp"}] else [] end))}
     }' >"$VLS_DIR/config.new.json"
   )
   if ! "$VLS_BIN" run -test -config "$VLS_DIR/config.new.json" >/dev/null 2>&1; then

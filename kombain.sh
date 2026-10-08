@@ -55,6 +55,8 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/modules/awg.sh"
 # shellcheck source=modules/vless.sh
 . "$KB_SRC/modules/vless.sh"
+# shellcheck source=modules/warp.sh
+. "$KB_SRC/modules/warp.sh"
 
 # Режим для бота: kombain cli <модуль> <команда> [аргументы]
 if [ "${1:-}" = "cli" ]; then
@@ -67,6 +69,7 @@ if [ "${1:-}" = "cli" ]; then
     tgproxy) tgp_cli "$@"; exit $? ;;
     awg)     awg_cli "$@"; exit $? ;;
     vless)   vls_cli "$@"; exit $? ;;
+    warp)    warp_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi
@@ -84,7 +87,7 @@ ${C_BOLD}${C_CYAN}╔══════════════ КОМБАЙН �
  2) Прокси для нейронок (AdGuard + nginx)
  3) VLESS Reality (маска — чужой сайт)
  4) AmneziaWG 3.1
- 5) WARP                               ${C_YELLOW}[скоро]${C_RESET}
+ 5) WARP — выход через Cloudflare по устройствам
  6) Telegram-прокси (если Telegram не грузится)
 
  9) Обновить Комбайн
@@ -95,7 +98,7 @@ EOF
       2) aip_menu ;;
       4) awg_menu ;;
       3) vls_menu ;;
-      5) soon ;;
+      5) warp_menu ;;
       6) tgp_menu ;;
       9) exec "$KB_SRC/kombain.sh" --update ;;
       0) exit 0 ;;
