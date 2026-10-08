@@ -26,8 +26,9 @@ const installCommand = "command -v curl >/dev/null || { apt-get update -qq && ap
 const ownerCommand = "bash /opt/kombain/src/kombain.sh cli bot owner"
 
 // Telegram-прокси: для тех, у кого Telegram без VPN не грузится, — иначе до бота не дойти.
+// Ставим «Личные ссылки» (telemt): установщик получает ссылку admin, потом в боте раздаёшь свои ссылки людям.
 const proxyCommand = "command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl >/dev/null; }; " +
-	"curl -fsSL " + kbURL + " -o /tmp/kombain-start.sh && bash /tmp/kombain-start.sh cli tgproxy install"
+	"curl -fsSL " + kbURL + " -o /tmp/kombain-start.sh && bash /tmp/kombain-start.sh cli tgusers exe"
 
 var (
 	proxyTGPattern  = regexp.MustCompile(`^tg://proxy\?server=[0-9.]{7,15}&port=[0-9]{2,5}&secret=ee[0-9a-f]{20,200}$`)
