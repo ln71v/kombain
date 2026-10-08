@@ -89,6 +89,19 @@ jobs:
             kombain-android.apk
             kombain-android.apk.sha256
 
+      - name: Тестовая сборка — ссылка для телефона (только ветка android)
+        if: github.ref == 'refs/heads/android'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-test
+          name: "Android — тест (не для людей)"
+          prerelease: true
+          make_latest: false
+          body: "Тестовая сборка APK из ветки android. Обкатка на стенде США. Не раздавать."
+          files: |
+            kombain-android.apk
+            kombain-android.apk.sha256
+
       - name: Релиз без постоянного ключа не выпускаем
         if: startsWith(github.ref, 'refs/tags/v') && env.KB_KEYSTORE_FILE == ''
         run: |
