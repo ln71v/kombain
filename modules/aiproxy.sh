@@ -219,8 +219,9 @@ aip_free_port53() {
 }
 
 aip_check_ports() {
-  local p owner bad=0
-  for p in 443 853 8443 3000; do
+  local p owner bad=0 ports=("$@")
+  [ ${#ports[@]} -gt 0 ] || ports=(443 853 8443 3000)
+  for p in "${ports[@]}"; do
     owner=$(port_owner "$p" tcp)
     if [ -n "$owner" ]; then
       err "Порт $p уже занят: $owner"
@@ -594,12 +595,21 @@ aip_install_core() {
   # хвосты прошлой неудачной попытки — наши же контейнеры, мешают проверке портов
   docker rm -f "$AIP_C_AGH" "$AIP_C_NGX" >/dev/null 2>&1
 
-  # VLESS Комбайна сидит на 443 сам — уводим его за движок, строка в карте SNI уже будет
-  if declare -F vls_go_behind >/dev/null; then vls_go_behind || return 1; fi
-
+  # Сначала проверяем всё, кроме 443: если что-то занято — уходим, ничего не тронув
   step "Проверяю порты"
+  aip_check_ports 853 8443 3000 || { err "Освободи порты и запусти установку снова."; return 1; }
+
+  # VLESS Комбайна сидит на 443 сам — уводим его за движок, строка в карте SNI уже будет.
+  # Дальше любая ошибка — VLESS возвращаем на 443, чтобы VPN не пропал.
+  if declare -F vls_go_behind >/dev/null; then vls_go_behind || return 1; fi
+  aip_install_rest && return 0
+  if declare -F vls_go_direct >/dev/null; then vls_go_direct; fi
+  return 1
+}
+
+aip_install_rest() {
+  aip_check_ports 443 || { err "Освободи порты и запусти установку снова."; return 1; }
   aip_free_port53 || return 1
-  aip_check_ports || { err "Освободи порты и запусти установку снова."; return 1; }
 
   AGH_USER="admin"
   AGH_PASS=$(gen_password)

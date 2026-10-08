@@ -195,6 +195,20 @@ vls_go_behind() {
   ok "VLESS теперь внутри, на 127.0.0.1:$VLS_INNER"
 }
 
+# Обратно на 443 сам: нейронки не встали (движка нет), а VLESS уже ушёл за него.
+vls_go_direct() {
+  vls_installed || return 0
+  vls_load_env
+  [ "$VLS_MODE" = "behind" ] || return 0
+  [ "$(vls_port443)" = "our-nginx" ] && return 0   # движок живой — всё правильно
+  [ -z "$(port_owner 443 tcp)" ] || { err "443 занят программой «$(port_owner 443 tcp)» — VLESS вернуть некуда."; return 1; }
+  step "Возвращаю VLESS на 443: движка нет"
+  VLS_MODE=direct; vls_save_env
+  vls_write_conf && vls_restart || return 1
+  rm -f "${KB_HOME:?}/aiproxy/nginx/sni.d/$VLS_MAP_NAME"
+  ok "VLESS снова сам на 443"
+}
+
 vls_install_core() {
   vls_installed && { warn "VLESS уже установлен."; return 0; }
   local p443; p443=$(vls_port443)
@@ -364,6 +378,7 @@ vls_site_check() {
 
 vls_domain_on() {
   vls_installed || { err "VLESS не установлен."; return 1; }
+  vls_go_direct || return 1
   vls_load_env
   local host token ip old_env
   host=$(sec_domain); token=$(sec_cf_token)
@@ -573,6 +588,7 @@ vls_cli() {
                 qrencode -t PNG -s 6 -m 2 -o - "$l" ;;
     status)     vls_status ;;
     domain-on)  vls_domain_on ;;
+    go-direct)  vls_go_direct ;;
     domain-off) vls_domain_off ;;
     remove)     vls_remove_core ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
