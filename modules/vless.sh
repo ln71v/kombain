@@ -25,7 +25,12 @@ vls_installed() { [ -r "$VLS_ENV" ] && [ -r "$VLS_CONF" ]; }
 vls_running()   { systemctl is-active --quiet kombain-xray; }
 vls_load_env()  { [ -r "$VLS_ENV" ] && . "$VLS_ENV"; }   # shellcheck disable=SC1090
 
-vls_bin_ok() { [ -x "$VLS_BIN" ] && "$VLS_BIN" version 2>/dev/null | head -1 | grep -q "Xray ${VLS_VER#v} "; }
+# Вывод берём целиком: обрезка через head ломала проверку (pipefail + SIGPIPE у xray)
+vls_bin_ok() {
+  [ -x "$VLS_BIN" ] || return 1
+  local v; v=$("$VLS_BIN" version 2>/dev/null) || return 1
+  [[ "${v%%$'\n'*}" == "Xray ${VLS_VER#v} "* ]]
+}
 
 vls_get_bin() {
   vls_bin_ok && return 0
