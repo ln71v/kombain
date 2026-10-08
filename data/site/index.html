@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  :root { --bg:#f6f4ef; --fg:#22211f; --mut:#76736c; --line:#e2ded5; --acc:#3d6b5a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1b1b1a; --fg:#ecebe7; --mut:#9c9a94; --line:#33322f; --acc:#7fb39f; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.6 Georgia, "Times New Roman", serif; }
+  main { max-width:680px; margin:0 auto; padding:56px 20px 80px; }
+  header { border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:36px; }
+  h1 { font-size:30px; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--mut); font:15px/1.5 system-ui, sans-serif; }
+  article { margin-bottom:40px; }
+  h2 { font-size:21px; margin:0 0 4px; }
+  time { color:var(--mut); font:13px system-ui, sans-serif; }
+  p { margin:10px 0 0; }
+  a { color:var(--acc); }
+  footer { border-top:1px solid var(--line); padding-top:16px; color:var(--mut); font:13px system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>{{TITLE}}</h1>
+    <div class="sub">Заметки о походах, фотографии и всяком, что жалко забыть.</div>
+  </header>
+
+  <article>
+    <h2>Осенний маршрут по хребту</h2>
+    <time>{{D1}}</time>
+    <p>Вышли затемно, к перевалу поднялись к полудню. Ветер был такой, что штатив пришлось держать руками.
+    Зато туман внизу лёг ровно, как молоко в блюдце, — ради таких минут и ходим.</p>
+  </article>
+
+  <article>
+    <h2>Старый объектив на новой камере</h2>
+    <time>{{D2}}</time>
+    <p>Переходник за копейки, ручная фокусировка и мягкий рисунок, который не повторить фильтрами.
+    Резкость по краям так себе, но портреты получаются живые.</p>
+  </article>
+
+  <article>
+    <h2>Список снаряжения на выходные</h2>
+    <time>{{D3}}</time>
+    <p>Спальник до нуля, газовая горелка, налобный фонарь с запасными батарейками и термос.
+    Всё остальное — по погоде. Лишний килограмм на подъёме чувствуется сильнее, чем кажется дома.</p>
+  </article>
+
+  <footer>© {{YEAR}} {{TITLE}}</footer>
+</main>
+</body>
+</html>

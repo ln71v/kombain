@@ -8,7 +8,8 @@
 #      • свободен                     → Xray слушает 443 сам;
 #      • занят движком Комбайна (nginx) → Xray на 127.0.0.1:8444, движок отдаёт ему SNI маски (docs/DEV-PORTS.md).
 #  - Свой бинарник и своя служба (kombain-xray), чужой xray на сервере не трогаем.
-#  - Позже: вариант «свой домен + сайт-заглушка» (нужен домен).
+#  - Свой домен (домен и ключ Cloudflare из сейфа): маска — твой домен, за ней настоящий сайт-заглушка
+#    с настоящим сертификатом (Caddy на 127.0.0.1:8080, сертификат certbot через Cloudflare, порт 80 не нужен).
 
 VLS_VER="v26.2.6"   # как на Германии (3x-ui): с ней Hiddify дружит, с 26.9.30 — нет
 VLS_URL="https://github.com/XTLS/Xray-core/releases/download/$VLS_VER/Xray-linux-64.zip"
@@ -20,6 +21,16 @@ VLS_UNIT="/etc/systemd/system/kombain-xray.service"
 VLS_INNER=8444
 VLS_MAP_NAME="20-vless.map"
 VLS_SNI_DEFAULT="www.yahoo.com"
+
+# Сайт-заглушка для своего домена
+VLS_CADDY_VER="v2.10.2"
+VLS_CADDY_URL="https://github.com/caddyserver/caddy/releases/download/$VLS_CADDY_VER/caddy_${VLS_CADDY_VER#v}_linux_amd64.tar.gz"
+VLS_CADDY_SUMS="https://github.com/caddyserver/caddy/releases/download/$VLS_CADDY_VER/caddy_${VLS_CADDY_VER#v}_checksums.txt"
+VLS_CADDY="/usr/local/lib/kombain/caddy"
+VLS_SITE="/usr/local/share/kombain-site"   # не секрет: страница и Caddyfile, читает служба без прав root
+VLS_SITE_PORT=8080
+VLS_SITE_UNIT="/etc/systemd/system/kombain-site.service"
+VLS_LE="/etc/letsencrypt"
 
 vls_installed() { [ -r "$VLS_ENV" ] && [ -r "$VLS_CONF" ]; }
 vls_running()   { systemctl is-active --quiet kombain-xray; }
@@ -103,6 +114,7 @@ vls_write_conf() {
   fi
   ( umask 077
     jq -n --arg listen "$listen" --argjson port "$port" --arg sni "$VLS_SNI" --arg priv "$VLS_PRIV" \
+      --arg target "${VLS_TARGET:-$VLS_SNI:443}" \
       --arg sid "$VLS_SID" --slurpfile cl "$VLS_DIR/clients.json" \
       --argjson warp "$warp_on" --argjson wu "$warp_users" '
     {
@@ -112,7 +124,7 @@ vls_write_conf() {
         settings: {decryption: "none",
           clients: [$cl[0][] | {id, email: .name, flow: "xtls-rprx-vision"}]},
         streamSettings: {network: "tcp", security: "reality",
-          realitySettings: {target: ($sni + ":443"), serverNames: [$sni], privateKey: $priv, shortIds: [$sid]}},
+          realitySettings: {target: $target, serverNames: [$sni], privateKey: $priv, shortIds: [$sid]}},
         sniffing: {enabled: true, destOverride: ["http", "tls", "quic"]}
       }],
       outbounds: ([{protocol: "freedom", tag: "direct"}, {protocol: "blackhole", tag: "block"}]
@@ -150,6 +162,8 @@ VLS_SID='$VLS_SID'
 VLS_SNI='$VLS_SNI'
 VLS_MODE='$VLS_MODE'
 VLS_ENDPOINT='$VLS_ENDPOINT'
+VLS_TARGET='${VLS_TARGET:-}'
+VLS_DOMAIN='${VLS_DOMAIN:-}'
 EOF
   )
 }
@@ -216,6 +230,205 @@ vls_install_core() {
 
   fw_register vless "443/tcp"
   if grep -q '^Status: active' <<<"$(ufw status 2>/dev/null)"; then fw_apply; fi
+
+  # В сейфе есть домен и ключ Cloudflare — сразу свой домен; не вышло — остаёмся на маске
+  if [ -n "$(sec_domain)" ] && [ -n "$(sec_cf_token)" ]; then
+    vls_domain_on || warn "Свой домен не включился — VLESS работает на маске $VLS_SNI_DEFAULT. Можно включить позже."
+  fi
+}
+
+# ───────────────────────── свой домен + сайт-заглушка ─────────────────────────
+# Снаружи: <домен>:443 с настоящим сертификатом и обычным сайтом. Xray (Reality) без ключа
+# отдаёт всё сайту на 127.0.0.1:8080, с ключом — VPN. Домен и ключ Cloudflare берём из сейфа.
+
+vls_caddy_ok() {
+  [ -x "$VLS_CADDY" ] || return 1
+  local v; v=$("$VLS_CADDY" version 2>/dev/null) || return 1
+  [[ "$v" == "$VLS_CADDY_VER "* ]]
+}
+
+vls_get_caddy() {
+  vls_caddy_ok && return 0
+  ensure_pkgs curl tar >/dev/null 2>&1 || return 1
+  step "Скачиваю Caddy $VLS_CADDY_VER (сервер для сайта-заглушки)"
+  local tmp want got f="caddy_${VLS_CADDY_VER#v}_linux_amd64.tar.gz"; tmp=$(mktemp -d)
+  if ! curl -fsSL --proto '=https' --max-time 180 --retry 2 "$VLS_CADDY_URL" -o "$tmp/c.tgz" \
+     || ! curl -fsSL --proto '=https' --max-time 60 --retry 2 "$VLS_CADDY_SUMS" -o "$tmp/sums"; then
+    err "Caddy не скачался с GitHub."; rm -rf "${tmp:?}"; return 1
+  fi
+  want=$(awk -v f="$f" '$2==f {print $1}' "$tmp/sums")
+  got=$(sha512sum "$tmp/c.tgz" | cut -d' ' -f1)
+  if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    err "Caddy скачался битый — контрольная сумма не сходится. Не ставлю."; rm -rf "${tmp:?}"; return 1
+  fi
+  tar -xzf "$tmp/c.tgz" -C "$tmp" caddy || { err "Архив Caddy не распаковался."; rm -rf "${tmp:?}"; return 1; }
+  install -d -m 0755 "$(dirname "$VLS_CADDY")"
+  install -o root -g root -m 0755 "$tmp/caddy" "$VLS_CADDY"
+  rm -rf "${tmp:?}"
+  vls_caddy_ok && ok "Caddy $VLS_CADDY_VER скачан и проверен" || { err "Caddy не запускается."; return 1; }
+}
+
+# Сертификат на домен: certbot через Cloudflare (DNS-01), порт 80 не нужен. Продлевает certbot.timer.
+vls_cert() {
+  local host="$1" live="$VLS_LE/live/$1/fullchain.pem" out
+  if [ -r "$live" ] && openssl x509 -checkend 2592000 -noout -in "$live" >/dev/null 2>&1 \
+     && grep -q "DNS:$host" <<<"$(openssl x509 -noout -ext subjectAltName -in "$live" 2>/dev/null)"; then
+    ok "Сертификат на $host уже есть"; return 0
+  fi
+  ensure_pkgs certbot python3-certbot-dns-cloudflare >/dev/null 2>&1 \
+    || { err "Не поставился certbot (программа для сертификатов)."; return 1; }
+  step "Получаю сертификат на $host (это до минуты)"
+  if out=$(certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
+        --dns-cloudflare --dns-cloudflare-credentials "$KB_CF_FILE" --dns-cloudflare-propagation-seconds 30 \
+        --cert-name "$host" -d "$host" --keep-until-expiring \
+        --deploy-hook "systemctl try-restart kombain-site" 2>&1); then
+    ok "Сертификат получен, продлевается сам"
+  else
+    err "Сертификат не получен:"; tail -8 <<<"$out"
+    say "Частые причины: ключ Cloudflare сделан для другого домена или домен ещё не Active в Cloudflare."
+    return 1
+  fi
+  systemctl enable --now certbot.timer >/dev/null 2>&1 || true
+}
+
+vls_site_write() {
+  local host="$1" title
+  title="${host%%.*}"; title="${title^}"
+  install -d -m 0755 "$VLS_SITE" "$VLS_SITE/www"
+  if [ ! -f "$VLS_SITE/www/index.html" ]; then   # свою страницу не перетираем
+    local d1 d2 d3
+    d1=$(date -d "-$((9 + RANDOM % 20)) days" +%d.%m.%Y); d2=$(date -d "-$((40 + RANDOM % 30)) days" +%d.%m.%Y)
+    d3=$(date -d "-$((90 + RANDOM % 60)) days" +%d.%m.%Y)
+    sed -e "s|{{TITLE}}|$title|g" -e "s|{{YEAR}}|$(date +%Y)|g" \
+        -e "s|{{D1}}|$d1|" -e "s|{{D2}}|$d2|" -e "s|{{D3}}|$d3|" "$KB_SRC/data/site/index.html" >"$VLS_SITE/www/index.html"
+    chmod 0644 "$VLS_SITE/www/index.html"
+  fi
+  cat >"$VLS_SITE/Caddyfile" <<EOF
+# Сайт-заглушка VLESS — генерирует Комбайн. Страница: $VLS_SITE/www
+{
+	admin off
+	auto_https off
+	persist_config off
+	default_sni $host
+	servers {
+		protocols h1 h2
+	}
+}
+
+https://$host:$VLS_SITE_PORT {
+	bind 127.0.0.1
+	tls {\$CREDENTIALS_DIRECTORY}/fullchain.pem {\$CREDENTIALS_DIRECTORY}/privkey.pem
+	root * $VLS_SITE/www
+	encode gzip
+	file_server
+	header -Server
+}
+EOF
+  chmod 0644 "$VLS_SITE/Caddyfile"
+  cat >"$VLS_SITE_UNIT" <<EOF
+[Unit]
+Description=Сайт-заглушка VLESS (Kombain)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=kombain-site
+Environment=HOME=/var/lib/kombain-site XDG_DATA_HOME=/var/lib/kombain-site XDG_CONFIG_HOME=/var/lib/kombain-site
+LoadCredential=fullchain.pem:$VLS_LE/live/$host/fullchain.pem
+LoadCredential=privkey.pem:$VLS_LE/live/$host/privkey.pem
+ExecStart=$VLS_CADDY run --config $VLS_SITE/Caddyfile --adapter caddyfile
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  CREDENTIALS_DIRECTORY="$VLS_LE/live/$host" "$VLS_CADDY" validate --config "$VLS_SITE/Caddyfile" \
+    --adapter caddyfile >/dev/null 2>&1 || { err "Caddy не принял настройки сайта."; return 1; }
+}
+
+# Отвечает ли сайт по-настоящему: правильный сертификат и код 200. $2 — порт (8080 или 443).
+vls_site_check() {
+  local code
+  code=$(curl --noproxy '*' -s -o /dev/null -w '%{http_code}' --max-time 8 \
+    --resolve "$1:$2:127.0.0.1" "https://$1:$2/")
+  [ "$code" = "200" ]
+}
+
+vls_domain_on() {
+  vls_installed || { err "VLESS не установлен."; return 1; }
+  vls_load_env
+  local host token ip old_env
+  host=$(sec_domain); token=$(sec_cf_token)
+  [ -n "$host" ] && [ -n "$token" ] || { err "Сначала заполни сейф: домен и ключ Cloudflare."; return 1; }
+  if [ "${VLS_DOMAIN:-}" = "$host" ] && vls_running && vls_site_check "$host" "$VLS_SITE_PORT"; then
+    ok "VLESS уже работает на своём домене $host"; return 0
+  fi
+  if grep -qiE "^\.?${host//./\\.}$" "$KB_SRC/data/ai-domains.txt" 2>/dev/null; then
+    err "Домен $host есть в списке нейронок — так нельзя."; return 1
+  fi
+  local o; o=$(port_owner "$VLS_SITE_PORT" tcp)
+  [ -z "$o" ] || [ "$o" = "caddy" ] || { err "Порт $VLS_SITE_PORT занят программой «$o»."; return 1; }
+  ip="$VLS_ENDPOINT"
+
+  step "Запись $host в Cloudflare"
+  sec_cf_records "$host" "$ip" "" only
+  case $? in
+    0) ;;
+    3) err "Имя $host в Cloudflare смотрит на другой сервер. Поправь запись на $ip или впиши в сейф другой домен."; return 1 ;;
+    *) return 1 ;;
+  esac
+
+  vls_cert "$host" || return 1
+  vls_get_caddy || return 1
+  step "Запускаю сайт-заглушку"
+  vls_site_write "$host" || return 1
+  systemctl enable kombain-site >/dev/null 2>&1
+  systemctl restart kombain-site; sleep 2
+  vls_site_check "$host" "$VLS_SITE_PORT" \
+    || { err "Сайт-заглушка не отвечает. Подробности: journalctl -u kombain-site -n 30"; return 1; }
+  ok "Сайт-заглушка работает"
+
+  step "Переключаю VLESS на $host"
+  old_env=$(cat "$VLS_ENV")
+  VLS_SNI="$host"; VLS_TARGET="127.0.0.1:$VLS_SITE_PORT"; VLS_DOMAIN="$host"
+  vls_save_env
+  if ! { vls_write_conf && vls_restart && { [ "$VLS_MODE" != "behind" ] || vls_nginx_map; }; }; then
+    printf '%s\n' "$old_env" >"$VLS_ENV"; vls_load_env; vls_write_conf && vls_restart
+    [ "$VLS_MODE" = "behind" ] && vls_nginx_map >/dev/null 2>&1
+    err "Не переключилось — вернула как было."; return 1
+  fi
+  sleep 1
+  if vls_site_check "$host" 443; then ok "Снаружи на 443 — твой сайт с настоящим сертификатом"
+  else warn "Сайт через 443 не ответил. Посмотри «Состояние»."; fi
+  ok "VLESS на своём домене $host"
+  warn "Ключи у всех устройств поменялись — пришли каждому новый QR."
+}
+
+vls_domain_off() {
+  vls_installed || { err "VLESS не установлен."; return 1; }
+  vls_load_env
+  [ -n "${VLS_DOMAIN:-}" ] || { ok "VLESS и так на маске $VLS_SNI"; return 0; }
+  VLS_SNI="$VLS_SNI_DEFAULT"; VLS_TARGET=""; VLS_DOMAIN=""
+  vls_save_env
+  vls_write_conf && vls_restart || return 1
+  if [ "$VLS_MODE" = "behind" ]; then vls_nginx_map || return 1; fi
+  systemctl disable --now kombain-site >/dev/null 2>&1
+  ok "VLESS снова на маске $VLS_SNI. Сертификат оставила — пригодится, если вернёшься."
+  warn "Ключи у всех устройств поменялись — пришли каждому новый QR."
+}
+
+vls_site_remove() {
+  systemctl disable --now kombain-site >/dev/null 2>&1
+  rm -f "$VLS_SITE_UNIT"; systemctl daemon-reload
+  rm -rf "${VLS_SITE:?}"
 }
 
 # ───────────────────────── клиенты ─────────────────────────
@@ -273,14 +486,28 @@ vls_status() {
   if [ "$VLS_MODE" = "behind" ]; then say "Режим: за движком Комбайна, внутри 127.0.0.1:$VLS_INNER"
   else say "Режим: сам на 443"; fi
   local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 --resolve "$VLS_SNI:443:127.0.0.1" "https://$VLS_SNI/")
-  if [ "$code" != "000" ]; then ok "Маска отвечает как настоящий $VLS_SNI (код $code)"
-  else err "Маска не отвечает — сервер без ключа выглядит странно"; fi
+  if [ -n "${VLS_DOMAIN:-}" ]; then
+    say "Маска: свой домен $VLS_DOMAIN, за ним сайт-заглушка"
+    systemctl is-active --quiet kombain-site && ok "Сайт-заглушка работает" || err "Сайт-заглушка не запущена (kombain-site)"
+    local crt="$VLS_LE/live/$VLS_DOMAIN/fullchain.pem"
+    [ -r "$crt" ] && ok "Сертификат до: $(openssl x509 -enddate -noout -in "$crt" | cut -d= -f2)"
+    if vls_site_check "$VLS_DOMAIN" 443; then ok "Снаружи без ключа — твой сайт с настоящим сертификатом"
+    else err "Без ключа сайт не открывается — сервер выглядит странно"; fi
+  else
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 --resolve "$VLS_SNI:443:127.0.0.1" "https://$VLS_SNI/")
+    if [ "$code" != "000" ]; then ok "Маска отвечает как настоящий $VLS_SNI (код $code)"
+    else err "Маска не отвечает — сервер без ключа выглядит странно"; fi
+  fi
   say "Устройства: $(vls_clients | tr '\n' ' ')"
 }
 
 vls_remove_core() {
   vls_installed || { warn "VLESS не установлен."; return 0; }
+  vls_load_env
+  vls_site_remove
+  if [ -n "${VLS_DOMAIN:-}" ] && command -v certbot >/dev/null 2>&1; then
+    certbot delete --non-interactive --cert-name "$VLS_DOMAIN" >/dev/null 2>&1 || true
+  fi
   systemctl disable --now kombain-xray >/dev/null 2>&1
   rm -f /etc/systemd/system/kombain-xray.service "${KB_HOME:?}/aiproxy/nginx/sni.d/20-vless.map"
   systemctl daemon-reload
@@ -303,6 +530,8 @@ ${C_BOLD}══ VLESS Reality ══${C_RESET}
  4) Состояние
  5) Удалить устройство
  6) Удалить VLESS
+ 7) Свой домен + сайт-заглушка (домен и ключ Cloudflare из сейфа)
+ 8) Вернуть маску $VLS_SNI_DEFAULT
  0) Назад
 EOF
     case "$(ask "Выбор")" in
@@ -312,6 +541,8 @@ EOF
       4) vls_status ;;
       5) say "Устройства: $(vls_clients | tr '\n' ' ')"; vls_remove_client "$(ask "Какое удалить")" ;;
       6) confirm "Удалить VLESS? Все устройства отключатся." && vls_remove_core ;;
+      7) confirm "Переключить на свой домен? Ключи у всех устройств поменяются." && vls_domain_on ;;
+      8) confirm "Вернуть маску? Ключи у всех устройств поменяются." && vls_domain_off ;;
       0) return ;;
       *) warn "Нет такого пункта" ;;
     esac
@@ -325,11 +556,12 @@ vls_cli() {
     info)
       if vls_installed; then
         vls_load_env
-        jq -nc --arg ip "$VLS_ENDPOINT" --arg sni "$VLS_SNI" --arg mode "$VLS_MODE" \
+        jq -nc --arg ip "$VLS_ENDPOINT" --arg sni "$VLS_SNI" --arg mode "$VLS_MODE" --arg dom "${VLS_DOMAIN:-}" \
           --argjson run "$(vls_running && echo true || echo false)" --argjson c "$(jq -c '[.[].name]' "$VLS_DIR/clients.json")" \
-          '{installed:true, running:$run, endpoint:$ip, sni:$sni, mode:$mode, clients:$c}'
+          '{installed:true, running:$run, endpoint:$ip, sni:$sni, mode:$mode, domain:$dom, clients:$c}'
       else
-        jq -nc '{installed:false}'
+        jq -nc --arg d "$(sec_domain)" --argjson cf "$([ -n "$(sec_cf_token)" ] && echo true || echo false)" \
+          '{installed:false, safe_domain:$d, safe_cf:$cf}'
       fi ;;
     install)    vls_install_core ;;
     update-bin) vls_installed || { err "VLESS не установлен"; return 1; }
@@ -340,6 +572,8 @@ vls_cli() {
     qr-png)     local l; l=$(vls_valid_client "${1:-}" && vls_link "$1") || { err "Нет такого устройства"; return 1; }
                 qrencode -t PNG -s 6 -m 2 -o - "$l" ;;
     status)     vls_status ;;
+    domain-on)  vls_domain_on ;;
+    domain-off) vls_domain_off ;;
     remove)     vls_remove_core ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
   esac
