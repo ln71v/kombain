@@ -9,7 +9,7 @@
 #      • занят движком Комбайна (nginx) → Xray на 127.0.0.1:8444, движок отдаёт ему SNI маски (docs/DEV-PORTS.md).
 #  - Свой бинарник и своя служба (kombain-xray), чужой xray на сервере не трогаем.
 #  - Свой домен (домен и ключ Cloudflare из сейфа): маска — твой домен, за ней настоящий сайт-заглушка
-#    с настоящим сертификатом (Caddy на 127.0.0.1:8080, сертификат certbot через Cloudflare, порт 80 не нужен).
+#    с настоящим сертификатом (Caddy на 127.0.0.1:8090, сертификат certbot через Cloudflare, порт 80 не нужен).
 
 VLS_VER="v26.2.6"   # как на Германии (3x-ui): с ней Hiddify дружит, с 26.9.30 — нет
 VLS_URL="https://github.com/XTLS/Xray-core/releases/download/$VLS_VER/Xray-linux-64.zip"
@@ -28,8 +28,8 @@ VLS_CADDY_URL="https://github.com/caddyserver/caddy/releases/download/$VLS_CADDY
 VLS_CADDY_SUMS="https://github.com/caddyserver/caddy/releases/download/$VLS_CADDY_VER/caddy_${VLS_CADDY_VER#v}_checksums.txt"
 VLS_CADDY="/usr/local/lib/kombain/caddy"
 VLS_SITE="/usr/local/share/kombain-site"   # не секрет: страница и Caddyfile, читает служба без прав root
-VLS_SITE_PORT=8080                # первый свободный из VLS_SITE_PORTS (8080 бывает занят чужим)
-VLS_SITE_PORTS="8080 8090 18080 28080"
+VLS_SITE_PORT=8090                # первый свободный из VLS_SITE_PORTS
+VLS_SITE_PORTS="8090 18090 28090"   # 8080, 8081, 2398, 8888 — Telegram WEB Proxy (telegram-proxy), не берём
 VLS_SITE_UNIT="/etc/systemd/system/kombain-site.service"
 VLS_LE="/etc/letsencrypt"
 
@@ -254,7 +254,7 @@ vls_install_core() {
 
 # ───────────────────────── свой домен + сайт-заглушка ─────────────────────────
 # Снаружи: <домен>:443 с настоящим сертификатом и обычным сайтом. Xray (Reality) без ключа
-# отдаёт всё сайту на 127.0.0.1:8080, с ключом — VPN. Домен и ключ Cloudflare берём из сейфа.
+# отдаёт всё сайту на 127.0.0.1:8090, с ключом — VPN. Домен и ключ Cloudflare берём из сейфа.
 
 vls_caddy_ok() {
   [ -x "$VLS_CADDY" ] || return 1

@@ -89,7 +89,7 @@
 - Бот: «🔑 VLESS» — установить, добавить устройство (QR + ссылка), ключ, состояние, удалить.
 - Версия Xray 26.2.6 (как на Германии, 3x-ui). С 26.9.30 Hiddify получал «authentication failed» на Reality — не поднимать без проверки на телефоне.
 - Обкатано 08.10 на США: Hiddify подключается и на мобильном, и дома на Seven Sky. Amnezia VPN QR с vless:// не читает — советуем Hiddify.
-- Свой домен (v0.11.0): домен и ключ Cloudflare из сейфа. Маска = сам домен из сейфа, Reality target = 127.0.0.1:8080.
+- Свой домен (v0.11.0): домен и ключ Cloudflare из сейфа. Маска = сам домен из сейфа, Reality target = 127.0.0.1:8090.
   Запись A <домен> → IP (только она, без *.), сертификат certbot из apt (DNS-01 Cloudflare, /etc/letsencrypt, продлевает certbot.timer,
   после продления try-restart kombain-site). Сайт — Caddy v2.10.2 (/usr/local/lib/kombain/caddy, сумма sha512 из checksums релиза),
   служба kombain-site (DynamicUser, сертификат через LoadCredential), страница /usr/local/share/kombain-site/www — свою не перетираем.
