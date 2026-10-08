@@ -1,0 +1,68 @@
+// Комбайн для Android. Собирается на GitHub (.github/workflows/build-android.yml):
+// сначала Go-ядро в libs/kbcore.aar (gomobile), потом это приложение.
+plugins {
+    id 'com.android.application' version '8.7.3'
+}
+
+def kbVersion = file('../../VERSION').text.trim()               // 0.13.0
+def kbParts = kbVersion.tokenize('.').collect { it as int }
+def kbCode = kbParts[0] * 10000 + kbParts[1] * 100 + kbParts[2] // 1300
+
+android {
+    namespace 'io.github.ln71v.kombain'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.ln71v.kombain'
+        minSdk 26
+        targetSdk 34
+        versionCode kbCode
+        versionName kbVersion
+    }
+
+    signingConfigs {
+        release {
+            // Ключ подписи — из секретов GitHub. Один и тот же ключ = обновления ставятся поверх.
+            def ks = System.getenv('KB_KEYSTORE_FILE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KB_KEYSTORE_PASS')
+                keyAlias System.getenv('KB_KEY_ALIAS') ?: 'kombain'
+                keyPassword System.getenv('KB_KEYSTORE_PASS')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv('KB_KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += ["$buildDir/generated/kb-ui"]
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+// Интерфейс берём прямо из установщика для Windows — один экран на две программы.
+tasks.register('copyUi', Copy) {
+    from '../../starter/ui/index.html'
+    into "$buildDir/generated/kb-ui"
+}
+preBuild.dependsOn 'copyUi'
+
+dependencies {
+    implementation files('libs/kbcore.aar')
+}
