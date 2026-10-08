@@ -283,6 +283,15 @@ vls_get_caddy() {
   vls_caddy_ok && ok "Caddy $VLS_CADDY_VER скачан и проверен" || { err "Caddy не запускается."; return 1; }
 }
 
+# После любого продления сертификата перезапустить сайт. Общий крючок certbot: срабатывает и когда
+# сертификат на этот домен уже был получен до Комбайна другим способом (например, плагином nginx).
+VLS_CERT_HOOK="$VLS_LE/renewal-hooks/deploy/kombain-site.sh"
+vls_cert_hook() {
+  install -d -m 0755 "$(dirname "$VLS_CERT_HOOK")"
+  printf '#!/bin/sh\n# Комбайн: сайт-заглушка VLESS берёт новый сертификат\nsystemctl try-restart kombain-site\n' >"$VLS_CERT_HOOK"
+  chmod 0755 "$VLS_CERT_HOOK"
+}
+
 # Сертификат на домен: certbot через Cloudflare (DNS-01), порт 80 не нужен. Продлевает certbot.timer.
 vls_cert() {
   local host="$1" live="$VLS_LE/live/$1/fullchain.pem" out
@@ -295,8 +304,7 @@ vls_cert() {
   step "Получаю сертификат на $host (это до минуты)"
   if out=$(certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
         --dns-cloudflare --dns-cloudflare-credentials "$KB_CF_FILE" --dns-cloudflare-propagation-seconds 30 \
-        --cert-name "$host" -d "$host" --keep-until-expiring \
-        --deploy-hook "systemctl try-restart kombain-site" 2>&1); then
+        --cert-name "$host" -d "$host" --keep-until-expiring 2>&1); then
     ok "Сертификат получен, продлевается сам"
   else
     err "Сертификат не получен:"; tail -8 <<<"$out"
@@ -385,6 +393,7 @@ vls_domain_on() {
   host=$(sec_domain); token=$(sec_cf_token)
   [ -n "$host" ] && [ -n "$token" ] || { err "Сначала заполни сейф: домен и ключ Cloudflare."; return 1; }
   [ -n "${VLS_TARGET:-}" ] && VLS_SITE_PORT="${VLS_TARGET##*:}"
+  vls_cert_hook
   if [ "${VLS_DOMAIN:-}" = "$host" ] && vls_running && vls_site_check "$host" "$VLS_SITE_PORT"; then
     ok "VLESS уже работает на своём домене $host"; return 0
   fi
@@ -450,7 +459,7 @@ vls_domain_off() {
 
 vls_site_remove() {
   systemctl disable --now kombain-site >/dev/null 2>&1
-  rm -f "$VLS_SITE_UNIT"; systemctl daemon-reload
+  rm -f "$VLS_SITE_UNIT" "$VLS_CERT_HOOK"; systemctl daemon-reload
   rm -rf "${VLS_SITE:?}"
 }
 
@@ -527,10 +536,7 @@ vls_status() {
 vls_remove_core() {
   vls_installed || { warn "VLESS не установлен."; return 0; }
   vls_load_env
-  vls_site_remove
-  if [ -n "${VLS_DOMAIN:-}" ] && command -v certbot >/dev/null 2>&1; then
-    certbot delete --non-interactive --cert-name "$VLS_DOMAIN" >/dev/null 2>&1 || true
-  fi
+  vls_site_remove   # сертификат не удаляем: им может пользоваться и другое (nginx, Telegram WEB Proxy)
   systemctl disable --now kombain-xray >/dev/null 2>&1
   rm -f /etc/systemd/system/kombain-xray.service "${KB_HOME:?}/aiproxy/nginx/sni.d/20-vless.map"
   systemctl daemon-reload
