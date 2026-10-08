@@ -7,6 +7,8 @@
 #  - Порт: 9443, а если его держит старый mtg — 9444 (ставится рядом, mtg не трогаем).
 #  - Пульт telemt — только 127.0.0.1:9091, им пользуются Комбайн и бот.
 #  - Конфиг и кэш — /var/lib/kombain-telemt (служба kombain-telemt пишет туда сама через пульт).
+#    Пользователь системный, не «одноразовый» (DynamicUser): telemt не читает конфиг через ярлыки,
+#    а DynamicUser делает из /var/lib/<имя> ярлык.
 
 TGU_VER="3.5.14"
 TGU_URL="https://github.com/telemt/telemt/releases/download/$TGU_VER/telemt-x86_64-linux-gnu.tar.gz"
@@ -17,6 +19,7 @@ TGU_UNIT="/etc/systemd/system/kombain-telemt.service"
 TGU_API="http://127.0.0.1:9091/v1"
 TGU_FRONT="www.cloudflare.com"
 TGU_ENV="$KB_HOME/tgusers/env"
+TGU_USER="kombain-telemt"
 
 tgu_installed() { [ -r "$TGU_ENV" ] && [ -f "$TGU_UNIT" ]; }
 tgu_running()   { systemctl is-active --quiet kombain-telemt; }
@@ -68,7 +71,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-DynamicUser=yes
+User=$TGU_USER
+Group=$TGU_USER
 StateDirectory=kombain-telemt
 WorkingDirectory=$TGU_STATE
 ExecStart=$TGU_BIN $TGU_CONF
@@ -87,7 +91,12 @@ EOF
 }
 
 tgu_install_core() {
-  tgu_installed && { warn "Уже установлено."; return 0; }
+  if tgu_installed; then
+    tgu_running && grep -q '^200' <<<"$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$TGU_API/users")" \
+      && { warn "Уже установлено и работает."; return 0; }
+    warn "Стоит, но не работает — переставляю начисто."
+    tgu_remove_core >/dev/null
+  fi
   ensure_pkgs curl jq tar qrencode || return 1
   local port="${KB_TGU_PORT:-9443}" ip
   if [ -n "$(port_owner "$port" tcp)" ]; then
@@ -101,7 +110,10 @@ tgu_install_core() {
 
   tgu_get_bin || return 1
   step "Настраиваю Telegram-прокси по именам"
-  install -d -m 0755 "$TGU_STATE"
+  id "$TGU_USER" >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin "$TGU_USER"
+  # хвост прошлой попытки: ярлык от DynamicUser
+  if [ -L "$TGU_STATE" ]; then rm -f "${TGU_STATE:?}"; rm -rf /var/lib/private/kombain-telemt; fi
+  install -d -m 0750 -o "$TGU_USER" -g "$TGU_USER" "$TGU_STATE"
   cat >"$TGU_CONF" <<EOF
 # Комбайн: telemt. Людей добавляет бот через пульт — руками не правь.
 [general]
@@ -138,11 +150,12 @@ tls_front_dir = "tlsfront"
 [access.users]
 admin = "$(openssl rand -hex 16)"
 EOF
+  chown "$TGU_USER:$TGU_USER" "$TGU_CONF"; chmod 640 "$TGU_CONF"
   mkdir -p "$(dirname "$TGU_ENV")"
   printf "TGU_PORT='%s'\nTGU_IP='%s'\n" "$port" "$ip" >"$TGU_ENV"
   tgu_unit
-  # DynamicUser: папку состояния отдаём службе, она будет писать конфиг сама
-  systemctl enable --now kombain-telemt >/dev/null 2>&1
+  systemctl enable kombain-telemt >/dev/null 2>&1
+  systemctl restart kombain-telemt
   local _ up=0
   for _ in $(seq 1 20); do tgu_api GET /users >/dev/null 2>&1 && { up=1; break; }; sleep 1; done
   [ "$up" = 1 ] || { err "telemt не запустился. Логи: journalctl -u kombain-telemt -n 30"; return 1; }
@@ -157,6 +170,7 @@ tgu_remove_core() {
   systemctl disable --now kombain-telemt >/dev/null 2>&1
   rm -f /etc/systemd/system/kombain-telemt.service; systemctl daemon-reload
   rm -rf /var/lib/kombain-telemt /var/lib/private/kombain-telemt "${KB_HOME:?}/tgusers"
+  userdel kombain-telemt >/dev/null 2>&1
   fw_unregister tgusers
   ok "Telegram-прокси по именам удалён"
 }

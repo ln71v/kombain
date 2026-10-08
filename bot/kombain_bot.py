@@ -760,6 +760,8 @@ def tgu_screen(chat, info=None):
             "Нажми на человека — ссылка, выключить, удалить.\n✅ — пускает, ⛔ — выключен.")
     rows = [[btn(f"{'✅' if u['on'] else '⛔'} {u['name']} · {fmt_mb(u.get('bytes'))}"
                  f"{' · онлайн' if u.get('conns') else ''}", f"tgu:u:{u['name']}")] for u in users[:40]]
+    if not info.get("running"):
+        rows.insert(0, [btn("🔧 Не запущен — переставить начисто", "tgu:install")])
     rows += [[btn("➕ Добавить человека", "tgu:add")], [btn("🗑 Удалить прокси целиком", "tgu:rm")]]
     send(chat, head, {"inline_keyboard": rows})
 
