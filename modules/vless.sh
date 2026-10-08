@@ -320,6 +320,8 @@ vls_cli() {
         jq -nc '{installed:false}'
       fi ;;
     install)    vls_install_core ;;
+    update-bin) vls_installed || { err "VLESS не установлен"; return 1; }
+                vls_get_bin && vls_restart && ok "Xray обновлён до $VLS_VER, ключи прежние" ;;
     add-client) vls_installed || { err "VLESS не установлен"; return 1; }; vls_add_client "${1:-}" ;;
     rm-client)  vls_installed || return 1; vls_remove_client "${1:?имя}" ;;
     link)       vls_valid_client "${1:-}" && vls_link "$1" || { err "Нет такого устройства"; return 1; } ;;
