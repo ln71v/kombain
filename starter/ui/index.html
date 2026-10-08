@@ -506,4 +506,7 @@ async function poll(){try{if(typeof window.installerState==='function')render(aw
 poll();
 document.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('keydown',e=>{if(e.key==='F5'||e.key==='F12'||(e.ctrlKey&&['r','R','p','P','s','S','+','-','0'].includes(e.key)))e.preventDefault();});
+
+// Номер версии рядом с названием в шапке каждого окна
+bridge('appVersion').then(function(v){document.querySelectorAll('span').forEach(function(s){if(s.textContent==='Комбайн'){var m=document.createElement('small');m.textContent=' '+v;m.style.cssText='font-family:Manrope,sans-serif;font-weight:500;font-size:11px;opacity:.55;margin-left:6px;letter-spacing:0';s.appendChild(m);}});}).catch(function(){});
 </script></body></html>

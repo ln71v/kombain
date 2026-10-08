@@ -26,6 +26,69 @@ sec_cf_save() {
   chmod 600 "$KB_CF_FILE"
 }
 
+# ── Записи в Cloudflare делаем сами, ключом из сейфа ──
+sec_cf_api() {
+  # sec_cf_api METHOD path [json] — ответ Cloudflare в JSON
+  local m="$1" p="$2" body="${3:-}" t; t=$(sec_cf_token)
+  [ -n "$t" ] || { echo '{"success":false}'; return 1; }
+  if [ -n "$body" ]; then
+    curl -s --max-time 20 -X "$m" -H "Authorization: Bearer $t" -H 'Content-Type: application/json' \
+      --data "$body" "https://api.cloudflare.com/client/v4$p"
+  else
+    curl -s --max-time 20 -X "$m" -H "Authorization: Bearer $t" "https://api.cloudflare.com/client/v4$p"
+  fi
+}
+
+# Зона в Cloudflare, к которой относится имя: am.site.ru → ищем am.site.ru, потом site.ru
+sec_cf_zone() {
+  local n="$1" id
+  while [[ "$n" == *.* ]]; do
+    id=$(sec_cf_api GET "/zones?name=$n" | jq -r '.result[0].id // empty' 2>/dev/null)
+    [ -n "$id" ] && { echo "$id"; return 0; }
+    n="${n#*.}"
+  done
+  return 1
+}
+
+# sec_cf_records <имя> <ip> [force] — ставит A-записи <имя> и *.<имя> → ip, облако серое.
+# 0 — записи на месте; 3 — имя уже занято другим адресом (без force не трогаем); 1 — ошибка.
+sec_cf_records() {
+  local host="$1" ip="$2" force="${3:-}" zone name recs n id cur typ body busy=0
+  zone=$(sec_cf_zone "$host") || {
+    err "Cloudflare не показывает зону для $host. Ключ сделан для другого домена или домен ещё не Active."
+    return 1; }
+  body=$(jq -nc --arg ip "$ip" '{type:"A", content:$ip, ttl:1, proxied:false}')
+  for name in "$host" "*.$host"; do
+    recs=$(sec_cf_api GET "/zones/$zone/dns_records?name=$name")
+    [ "$(jq -r '.success' <<<"$recs" 2>/dev/null)" = "true" ] || { err "Cloudflare не отдал записи для $name"; return 1; }
+    n=$(jq '.result | length' <<<"$recs")
+    if [ "$n" -eq 0 ]; then
+      sec_cf_api POST "/zones/$zone/dns_records" "$(jq -c --arg n "$name" '. + {name:$n}' <<<"$body")" \
+        | jq -e '.success' >/dev/null || { err "Не получилось создать $name"; return 1; }
+      ok "Создала запись $name → $ip"
+      continue
+    fi
+    id=$(jq -r '.result[0].id' <<<"$recs"); typ=$(jq -r '.result[0].type' <<<"$recs")
+    cur=$(jq -r '.result[0].content' <<<"$recs")
+    if [ "$n" -eq 1 ] && [ "$typ" = "A" ] && [ "$cur" = "$ip" ]; then
+      [ "$(jq -r '.result[0].proxied' <<<"$recs")" = "true" ] && \
+        sec_cf_api PATCH "/zones/$zone/dns_records/$id" '{"proxied":false}' >/dev/null
+      ok "Запись $name уже смотрит сюда"
+      continue
+    fi
+    if [ "$force" != "force" ]; then
+      warn "Имя $name уже занято: $typ → $cur"
+      busy=1; continue
+    fi
+    [ "$n" -eq 1 ] || { err "У $name несколько записей — разберись руками в Cloudflare"; return 1; }
+    sec_cf_api PUT "/zones/$zone/dns_records/$id" "$(jq -c --arg n "$name" '. + {name:$n}' <<<"$body")" \
+      | jq -e '.success' >/dev/null || { err "Не получилось перезаписать $name"; return 1; }
+    ok "Перезаписала $name: было $cur, стало $ip"
+  done
+  [ "$busy" -eq 1 ] && return 3
+  return 0
+}
+
 sec_domain()      { cat "$KB_DOMAIN_FILE" 2>/dev/null; }
 sec_domain_save() { mkdir -p "$KB_HOME"; printf '%s\n' "$1" >"$KB_DOMAIN_FILE"; }
 

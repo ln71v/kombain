@@ -5,7 +5,7 @@ name: build-windows
 on:
   push:
     branches: [main]
-    paths: ["starter/**", ".github/workflows/build-windows.yml"]
+    paths: ["starter/**", ".github/workflows/build-windows.yml", "VERSION"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -26,11 +26,18 @@ jobs:
         working-directory: starter
         run: go test ./...
 
+      - name: Номер версии
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="$GITHUB_REF_NAME"; else V="v$(cat VERSION)-dev"; fi
+          echo "KB_VER=$V" >> "$GITHUB_ENV"
+          echo "KB_NUM=$(cat VERSION)" >> "$GITHUB_ENV"
+          echo "Версия: $V"
+
       - name: Иконка, версия и манифест в файл
         working-directory: starter
         run: |
           go install github.com/tc-hib/go-winres@v0.3.3
-          go-winres make --arch amd64
+          go-winres make --arch amd64 --product-version "$KB_NUM" --file-version "$KB_NUM"
 
       - name: Сборка (без вырезания служебной информации)
         working-directory: starter
@@ -38,7 +45,7 @@ jobs:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: "0"
-        run: go build -trimpath -ldflags="-H windowsgui" -o ../kombain-start.exe .
+        run: go build -trimpath -ldflags="-H windowsgui -X main.version=${{ env.KB_VER }}" -o ../kombain-start.exe .
 
       - name: Контрольная сумма
         run: sha256sum kombain-start.exe | tee kombain-start.exe.sha256

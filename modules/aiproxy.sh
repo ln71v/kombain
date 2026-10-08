@@ -145,6 +145,7 @@ aip_txt_token() {
 3. Напротив «Edit zone DNS» нажми «Use template».
 4. Найди «Zone Resources». Там три поля, поставь:
      Include  →  Specific zone  →  твой домен
+   Если вписал домен вида am.mojdns.site — выбирай основной mojdns.site.
    Остальное не трогай.
 5. Внизу «Continue to summary» → «Create Token».
 6. Появится длинная строка — это ключ. «Copy».
@@ -517,12 +518,7 @@ aip_install() {
   DOMAIN=$(aip_ask_domain)
   DNS_HOST="dns.$DOMAIN"
 
-  step "Этап 3: записи"
-  aip_explain_records "$SERVER_IP"
-  pause
-  aip_wait_dns "$DNS_HOST" "$SERVER_IP" || return 1
-
-  step "Этап 4: ключ"
+  step "Этап 3: ключ"
   aip_explain_token
   CF_TOKEN=$(sec_cf_token)
   if [ -n "$CF_TOKEN" ] && confirm "Есть сохранённый ключ $(sec_mask "$CF_TOKEN"). Взять его?"; then
@@ -533,6 +529,20 @@ aip_install() {
       sec_cf_verify "$CF_TOKEN" && { ok "Cloudflare ключ принял"; break; }
       warn "Cloudflare этот ключ не принимает. Скопируй целиком или сделай новый."
     done
+    sec_cf_save "$CF_TOKEN"
+  fi
+
+  step "Этап 4: записи — делаю сама"
+  local rc=0
+  sec_cf_records "$DNS_HOST" "$SERVER_IP" || rc=$?
+  if [ "$rc" -eq 3 ] && confirm "Перезаписать эти имена на этот сервер?"; then
+    rc=0; sec_cf_records "$DNS_HOST" "$SERVER_IP" force || rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    warn "Сама не смогла — сделай руками:"
+    aip_explain_records "$SERVER_IP"
+    pause
+    aip_wait_dns "$DNS_HOST" "$SERVER_IP" || return 1
   fi
 
   step "Этап 5: твой телефон"
@@ -718,6 +728,13 @@ aip_cli() {
     text-records) aip_txt_records "${1:?ip}" ;;
     text-token)   aip_txt_token ;;
     check-dns)    ensure_pkgs dnsutils >/dev/null 2>&1; aip_dns_ok "dns.${1:?домен}" "${2:-$(server_ip)}" ;;
+    make-dns)
+      # сами ставим записи dns.<домен> и *.dns.<домен> ключом из сейфа; --force — перезаписать занятые
+      ensure_pkgs curl jq >/dev/null 2>&1
+      local d ip; d="${KB_DOMAIN:-$(sec_domain)}"; ip="${KB_SERVER_IP:-$(server_ip)}"
+      [ -n "$d" ] || { err "Нет домена в сейфе"; return 1; }
+      [ -n "$(sec_cf_token)" ] || { err "Нет ключа Cloudflare"; return 1; }
+      sec_cf_records "dns.$d" "$ip" "$([ "${1:-}" = "--force" ] && echo force)" ;;
     install)
       aip_installed && { err "Уже установлено"; return 1; }
       DOMAIN="${KB_DOMAIN:-$(sec_domain)}"; [ -n "$DOMAIN" ] || { err "Нет домена в сейфе"; return 1; }; CF_TOKEN="${KB_CF_TOKEN:-$(sec_cf_token)}"; FIRST_CLIENT="${KB_CLIENT:-$(sec_client)}"; FIRST_CLIENT="${FIRST_CLIENT:-phone}"

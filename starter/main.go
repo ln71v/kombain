@@ -17,6 +17,9 @@ import (
 //go:embed ui/index.html
 var interfaceHTML string
 
+// Версию подставляет сборка на GitHub: -ldflags "-X main.version=v0.3.0"
+var version = "dev"
+
 func main() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -32,7 +35,7 @@ func main() {
 		Debug:         false,
 		DataPath:      profile,
 		AutoFocus:     true,
-		WindowOptions: webview2.WindowOptions{Title: "Комбайн", Width: 720, Height: 520, Center: true},
+		WindowOptions: webview2.WindowOptions{Title: "Комбайн " + version, Width: 720, Height: 520, Center: true},
 	})
 	if w == nil {
 		return
@@ -59,6 +62,7 @@ func main() {
 			// Открывает Telegram Desktop: он сам спросит «Подключить прокси?»
 			return exec.Command("rundll32", "url.dll,FileProtocolHandler", link).Start()
 		}},
+		{"appVersion", func() (string, error) { return version, nil }},
 		{"closeWindow", func() error { w.Dispatch(func() { w.Terminate() }); return nil }},
 	}
 	for _, b := range bindings {
