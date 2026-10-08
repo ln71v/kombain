@@ -70,7 +70,12 @@ jobs:
         env:
           KB_KEYSTORE_PASS: ${{ secrets.KB_KEYSTORE_PASS }}
         run: |
-          gradle --no-daemon assembleRelease
+          set -o pipefail
+          if ! gradle --no-daemon assembleRelease 2>&1 | tee "$RUNNER_TEMP/gradle.log"; then
+            # Причину — наверх, в «Annotations» страницы сборки, чтобы не копаться в журнале.
+            grep -E "error:|What went wrong|> |FAILURE|Could not|not found" "$RUNNER_TEMP/gradle.log" | head -25 | sed 's/^/::error::/'
+            exit 1
+          fi
           cp build/outputs/apk/release/app-release.apk ../../kombain-android.apk
 
       - name: Контрольная сумма
