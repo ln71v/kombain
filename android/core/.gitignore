@@ -1,0 +1,2 @@
+# Копия starter/backend.go — делает gen.sh перед сборкой, в репу не кладём.
+backend_gen.go

@@ -1,0 +1,23 @@
+/* Подгонка окна установщика (720x520) под экран телефона. Сам интерфейс — starter/ui/index.html. */
+html,body{width:100%!important;height:100%!important;overflow:hidden!important}
+.screen>div{width:100vw!important;height:100vh!important;height:100dvh!important;border:0!important;border-radius:0!important}
+.screen>div>div:first-child{padding:0 16px!important}
+.content{padding:20px 16px 0!important;gap:12px!important}
+.content h1{font-size:21px!important}
+.footer{height:auto!important;min-height:72px;padding:12px 16px!important;flex-wrap:wrap;gap:10px;box-sizing:border-box}
+.footer>span{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
+.primary,.secondary{padding:0 16px!important}
+.fields{grid-template-columns:1fr!important}
+#tg-ready>div{flex-direction:column!important;align-items:flex-start!important}
+[id^=digit-]{width:12vw!important;max-width:56px;height:58px!important;font-size:26px!important}
+pre{height:140px}
+.kb-wrap{flex-wrap:wrap!important}
+.kb-col{flex-direction:column!important}
+.kb-col>*{width:auto!important;max-width:100%!important}
+#bot-name{text-decoration:underline;color:#0E6B5C}
+/* Середина экрана — узкие поля; низ с кнопками — переносится на новую строку, а не сжимается. */
+.screen>div>div:nth-child(2){padding-left:16px!important;padding-right:16px!important}
+.screen>div>div:last-child{flex-wrap:wrap!important;gap:10px!important;height:auto!important;min-height:72px;padding:12px 16px!important;box-sizing:border-box!important}
+.screen>div>div:last-child>span,.screen>div>div:last-child>div{display:flex;flex-wrap:wrap!important;gap:10px!important;justify-content:flex-end}
+.screen button{white-space:nowrap}
+#tg-ready label{margin-top:6px}
