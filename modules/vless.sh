@@ -74,8 +74,9 @@ Type=simple
 DynamicUser=yes
 LoadCredential=config.json:$VLS_CONF
 ExecStart=$VLS_BIN run -config \${CREDENTIALS_DIRECTORY}/config.json
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# NET_ADMIN — чтобы ставить метку WARP (sockopt mark); без него метка молча не ставится
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
