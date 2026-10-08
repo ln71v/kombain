@@ -481,7 +481,7 @@ def awg_screen(chat):
 def awg_send_client(chat, name):
     code, conf = kb("awg", "conf", name, timeout=30)
     if code != 0:
-        send(chat, "❌ " + esc(last_line(conf)))
+        send(chat, "❌ " + esc(last_line(conf)), awg_after())
         return
     qcode, png = kb_raw("awg", "qr-png", name)
     if qcode == 0 and png:
@@ -490,6 +490,15 @@ def awg_send_client(chat, name):
     send_file(chat, "sendDocument", "document", f"{name}.conf", conf.encode() + b"\n",
               "Или этот файл: Amnezia VPN → «+» → «Файл с настройками».\n"
               "Никому не пересылай — это ключ от твоего VPN.")
+    send(chat, "Что дальше?", awg_after(name))
+
+
+def awg_after(name=None):
+    rows = []
+    if name:
+        rows.append([btn("🔁 Прислать ключ ещё раз", f"awg:show:{name}")])
+    rows.append([btn("➕ Ещё устройство", "awg:add"), btn("◀️ Назад в AmneziaWG", "awg:menu")])
+    return inline(*rows)
 
 
 def awg_add(chat, text):
@@ -500,7 +509,8 @@ def awg_add(chat, text):
         return
     code, out = kb("awg", "add-client", name, timeout=60)
     if code != 0:
-        send_pre(chat, out, "❌ Не добавилось")
+        send_pre(chat, out, "❌ Не добавилось",
+                 inline([btn("🔁 Попробовать ещё раз", "awg:add")], [btn("◀️ Назад в AmneziaWG", "awg:menu")]))
         return
     awg_send_client(chat, name)
 
@@ -522,7 +532,7 @@ def awg_callback(chat, data):
         send(chat, "📱 Как назвать устройство? Латиницей, например <code>vasya-phone</code>.\n"
                    "Это подпись в списке — чтобы отличать телефон, ноут, мамин.", inline(CANCEL))
     elif data == "awg:status":
-        send_pre(chat, kb("awg", "status", timeout=60)[1], "📊 AmneziaWG")
+        send_pre(chat, kb("awg", "status", timeout=60)[1], "📊 AmneziaWG", awg_after())
     elif data.startswith("awg:pick:"):
         what = data.split(":")[2]
         clients = kb_json("awg", "info").get("clients") or []
@@ -537,7 +547,9 @@ def awg_callback(chat, data):
         send(chat, f"🗑 Удалить «{esc(name)}»? Этот ключ сразу перестанет работать.",
              inline([btn("Да, удалить", f"awg:rmok:{name}")], CANCEL))
     elif data.startswith("awg:rmok:"):
-        send_pre(chat, kb("awg", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово")
+        send_pre(chat, kb("awg", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово", awg_after())
+    elif data == "awg:menu":
+        awg_screen(chat)
 
 
 # ───────────────────────── VLESS Reality ─────────────────────────
@@ -563,14 +575,23 @@ def vls_screen(chat):
 def vls_send_client(chat, name):
     code, link = kb("vless", "link", name, timeout=30)
     if code != 0:
-        send(chat, "❌ " + esc(last_line(link)))
+        send(chat, "❌ " + esc(last_line(link)), vls_after())
         return
     qcode, png = kb_raw("vless", "qr-png", name)
     if qcode == 0 and png:
         send_file(chat, "sendPhoto", "photo", f"{name}.png", png,
                   f"QR для «{name}»: Hiddify / Amnezia VPN → «+» → сканировать", "image/png")
     send(chat, f"Или скопируй ключ и вставь в приложение («+» → из буфера):\n<code>{esc(link.strip())}</code>\n\n"
-               "Никому не пересылай — это ключ от твоего VPN.")
+               "Никому не пересылай — это ключ от твоего VPN.", vls_after(name))
+
+
+def vls_after(name=None):
+    """Кнопки после любого действия: что дальше, без прокрутки вверх."""
+    rows = []
+    if name:
+        rows.append([btn("🔁 Прислать ключ ещё раз", f"vls:show:{name}")])
+    rows.append([btn("➕ Ещё устройство", "vls:add"), btn("◀️ Назад в VLESS", "vls:menu")])
+    return inline(*rows)
 
 
 def vls_add(chat, text):
@@ -581,7 +602,8 @@ def vls_add(chat, text):
         return
     code, out = kb("vless", "add-client", name, timeout=60)
     if code != 0:
-        send_pre(chat, out, "❌ Не добавилось")
+        send_pre(chat, out, "❌ Не добавилось",
+                 inline([btn("🔁 Попробовать ещё раз", "vls:add")], [btn("◀️ Назад в VLESS", "vls:menu")]))
         return
     vls_send_client(chat, name)
 
@@ -602,7 +624,7 @@ def vls_callback(chat, data):
         send(chat, "📱 Как назвать устройство? Латиницей, например <code>vasya-phone</code>.\n"
                    "Это подпись в списке — чтобы отличать телефон, ноут, мамин.", inline(CANCEL))
     elif data == "vls:status":
-        send_pre(chat, kb("vless", "status", timeout=60)[1], "📊 VLESS")
+        send_pre(chat, kb("vless", "status", timeout=60)[1], "📊 VLESS", vls_after())
     elif data.startswith("vls:pick:"):
         what = data.split(":")[2]
         clients = kb_json("vless", "info").get("clients") or []
@@ -617,7 +639,9 @@ def vls_callback(chat, data):
         send(chat, f"🗑 Удалить «{esc(name)}»? Этот ключ сразу перестанет работать.",
              inline([btn("Да, удалить", f"vls:rmok:{name}")], CANCEL))
     elif data.startswith("vls:rmok:"):
-        send_pre(chat, kb("vless", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово")
+        send_pre(chat, kb("vless", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово", vls_after())
+    elif data == "vls:menu":
+        vls_screen(chat)
 
 
 # ───────────────────────── общие экраны ─────────────────────────
