@@ -731,13 +731,125 @@ TGP_ABOUT = ("✈️ <b>Telegram-прокси</b> — Telegram без VPN, ко�
 
 
 def tgp_screen(chat):
+    tu = kb_json("tgusers", "info")
+    if tu.get("installed"):
+        tgu_screen(chat, tu)
+        return
     info = kb_json("tgproxy", "info")
     if not info.get("installed"):
         send(chat, TGP_ABOUT, inline([btn("🚀 Установить", "tgp:install")]))
         return
     state_txt = "работает ✅" if info.get("running") else "остановлен ❌"
-    send(chat, f"✈️ <b>Telegram-прокси</b> — {state_txt}, порт {info.get('port', '')}",
-         inline([btn("🔗 Ссылка и QR", "tgp:link")], [btn("🗑 Удалить", "tgp:rm")]))
+    send(chat, f"✈️ <b>Telegram-прокси</b> — {state_txt}, порт {info.get('port', '')}\n"
+               "Ключ у него один на всех: отключить одного человека нельзя.",
+         inline([btn("🔗 Ссылка и QR", "tgp:link")],
+                [btn("👥 Поставить прокси с ключами по именам", "tgu:install")],
+                [btn("🗑 Удалить", "tgp:rm")]))
+
+
+# ── прокси по именам (telemt) ──
+def fmt_mb(b):
+    return f"{(b or 0) / 1048576:.1f} МБ"
+
+
+def tgu_screen(chat, info=None):
+    info = info or kb_json("tgusers", "info")
+    users = info.get("users") or []
+    head = (f"✈️ <b>Telegram-прокси по именам</b> — {'работает ✅' if info.get('running') else 'не запущен ❌'}, "
+            f"порт {info.get('port', '')}\n\n"
+            "Нажми на человека — ссылка, выключить, удалить.\n✅ — пускает, ⛔ — выключен.")
+    rows = [[btn(f"{'✅' if u['on'] else '⛔'} {u['name']} · {fmt_mb(u.get('bytes'))}"
+                 f"{' · онлайн' if u.get('conns') else ''}", f"tgu:u:{u['name']}")] for u in users[:40]]
+    rows += [[btn("➕ Добавить человека", "tgu:add")], [btn("🗑 Удалить прокси целиком", "tgu:rm")]]
+    send(chat, head, {"inline_keyboard": rows})
+
+
+def tgu_user(chat, name):
+    users = {u["name"]: u for u in (kb_json("tgusers", "info").get("users") or [])}
+    u = users.get(name)
+    if not u:
+        send(chat, "Такого уже нет.", inline([btn("◀️ Назад", "tgu:menu")]))
+        return
+    send(chat, f"👤 <b>{esc(name)}</b> — {'пускает ✅' if u['on'] else 'выключен ⛔'}\n"
+               f"Трафик: {fmt_mb(u.get('bytes'))}, сейчас подключений: {u.get('conns', 0)}, адресов: {u.get('ips', 0)}",
+         inline([btn("🔗 Ссылка и QR", f"tgu:link:{name}")],
+                [btn("⛔ Выключить", f"tgu:off:{name}") if u["on"] else btn("✅ Включить", f"tgu:on:{name}"),
+                 btn("🔁 Новый ключ", f"tgu:rot:{name}")],
+                [btn("🗑 Удалить", f"tgu:del:{name}"), btn("◀️ Назад", "tgu:menu")]))
+
+
+def tgu_send_link(chat, name):
+    code, link = kb("tgusers", "link", name, timeout=20)
+    link = link.strip()
+    if code != 0 or not link.startswith("tg://"):
+        send(chat, "❌ Не получилось взять ссылку.", inline([btn("◀️ Назад", "tgu:menu")]))
+        return
+    qcode, png = kb_raw("tgusers", "qr-png", name)
+    if qcode == 0 and png:
+        send_file(chat, "sendPhoto", "photo", f"{name}.png", png,
+                  f"QR для «{name}»: открыть камерой телефона, где стоит Telegram", "image/png")
+    web = "https://t.me/proxy?" + link.split("?", 1)[1]
+    send(chat, f"Ссылка для «{esc(name)}» — у него своя, другим не подойдёт:\n{esc(web)}",
+         inline([btn("🔁 Прислать ещё раз", f"tgu:link:{name}"), btn("◀️ Назад", "tgu:menu")]))
+
+
+def tgu_add_name(chat, text):
+    state.pop(chat, None)
+    name = text.strip().lower()
+    if not CLIENT_RE.match(name):
+        send(chat, "Только маленькие латинские буквы, цифры и дефис.", inline([btn("Ещё раз", "tgu:add")]))
+        return
+    code, out = kb("tgusers", "add", name, timeout=30)
+    if code != 0:
+        send_pre(chat, out, "❌ Не добавился", inline([btn("🔁 Ещё раз", "tgu:add"), btn("◀️ Назад", "tgu:menu")]))
+        return
+    tgu_send_link(chat, name)
+
+
+def tgu_callback(chat, data):
+    if data == "tgu:install":
+        def job():
+            code, out = kb("tgusers", "install", timeout=300)
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-15:]), "❌ Не встало. Последние строки:",
+                         inline([btn("🚀 Попробовать снова", "tgu:install")]))
+                return
+            send_pre(chat, "\n".join(out.splitlines()[-3:]), "✅ Готово")
+            tgu_screen(chat)
+        run_long(chat, "Ставлю Telegram-прокси по именам. Это минута.", job)
+    elif data == "tgu:menu":
+        tgu_screen(chat)
+    elif data == "tgu:add":
+        state[chat] = {"step": "tgu_add"}
+        send(chat, "👤 Как назвать человека? Латиницей, например <code>petya</code>.\n"
+                   "Это подпись в списке — чтобы потом знать, чья ссылка.", inline(CANCEL))
+    elif data.startswith("tgu:u:"):
+        tgu_user(chat, data.split(":", 2)[2])
+    elif data.startswith("tgu:link:"):
+        tgu_send_link(chat, data.split(":", 2)[2])
+    elif data.startswith(("tgu:on:", "tgu:off:", "tgu:rot:")):
+        act, name = data.split(":")[1], data.split(":", 2)[2]
+        cmd = {"on": "enable", "off": "disable", "rot": "rotate"}[act]
+        code, out = kb("tgusers", cmd, name, timeout=30)
+        if code != 0:
+            send_pre(chat, out, "❌ Не получилось")
+        if act == "rot" and code == 0:
+            tgu_send_link(chat, name)
+        else:
+            tgu_user(chat, name)
+    elif data.startswith("tgu:del:"):
+        name = data.split(":", 2)[2]
+        send(chat, f"🗑 Удалить «{esc(name)}»? Его ссылка сразу перестанет работать.",
+             inline([btn("Да, удалить", f"tgu:delok:{name}")], [btn("◀️ Назад", "tgu:menu")]))
+    elif data.startswith("tgu:delok:"):
+        kb("tgusers", "del", data.split(":", 2)[2], timeout=30)
+        tgu_screen(chat)
+    elif data == "tgu:rm":
+        send(chat, "🗑 Удалить Telegram-прокси по именам целиком? Перестанут работать ссылки у всех.",
+             inline([btn("Да, удалить", "tgu:rmok")], [btn("◀️ Назад", "tgu:menu")]))
+    elif data == "tgu:rmok":
+        send_pre(chat, kb("tgusers", "remove", timeout=60)[1], "🗑 Готово")
+        tgp_screen(chat)
 
 
 def tgp_send_link(chat):
@@ -861,6 +973,8 @@ def on_message(m):
         awg_add(chat, text)
     elif step == "vls_add":
         vls_add(chat, text)
+    elif step == "tgu_add":
+        tgu_add_name(chat, text)
     else:
         send(chat, "Выбирай кнопкой внизу 👇", MAIN_KB)
 
@@ -889,6 +1003,8 @@ def on_callback(q):
         warp_callback(chat, data)
     elif data.startswith("tgp:"):
         tgp_callback(chat, data)
+    elif data.startswith("tgu:"):
+        tgu_callback(chat, data)
 
 
 def claim(m):
