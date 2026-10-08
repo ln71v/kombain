@@ -81,6 +81,8 @@ warp_apply() {
 
   # VLESS сам читает список при сборке конфига
   if declare -F vls_installed >/dev/null && vls_installed; then
+    # служба Xray старых версий без права ставить метку — обновим её описание
+    grep -q 'CAP_NET_ADMIN' "$VLS_UNIT" 2>/dev/null || vls_unit
     vls_load_env; vls_write_conf && vls_restart
   fi
   return 0
