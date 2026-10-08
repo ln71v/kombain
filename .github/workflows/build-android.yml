@@ -76,7 +76,8 @@ jobs:
             grep -v '^\s*$' "$RUNNER_TEMP/gradle.log" | tail -40 | sed 's/^/::error::/' || true
             exit 1
           fi
-          cp build/outputs/apk/release/app-release.apk ../../kombain-android.apk
+          ls -la build/outputs/apk/release/
+          cp build/outputs/apk/release/*-release.apk ../../kombain-android.apk
 
       - name: Контрольная сумма
         run: sha256sum kombain-android.apk | tee kombain-android.apk.sha256
