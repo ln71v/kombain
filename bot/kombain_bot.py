@@ -782,15 +782,17 @@ TGP_ABOUT = ("✈️ <b>Telegram-прокси</b> — Telegram без VPN, ко�
 
 
 def tgp_screen(chat):
-    """Два вида прокси рядом: общая ссылка (mtg) и личные ссылки (telemt)."""
-    old, new = kb_json("tgproxy", "info"), kb_json("tgusers", "info")
+    """Три вида прокси рядом: общая ссылка (mtg), личные ссылки (telemt), WEB-ссылка (tproxy-server)."""
+    old, new, web = kb_json("tgproxy", "info"), kb_json("tgusers", "info"), kb_json("tgweb", "info")
     st = lambda i: ("работает ✅" if i.get("running") else "не запущен ❌") if i.get("installed") else "не стоит"
     text = ("✈️ <b>Telegram-прокси</b> — Telegram без VPN.\n"
             "Работают сообщения, фото, видео, голосовые. Звонки — нет, для них нужен VPN.\n\n"
             f"🔗 <b>Общая ссылка</b> — {st(old)}\n"
             "Одна ссылка на всех. Проще всего, но отключить одного человека нельзя.\n\n"
             f"👤 <b>Личные ссылки</b> — {st(new)}\n"
-            "У каждого своя ссылка: видно трафик, можно выключить одного, остальные работают.")
+            "У каждого своя ссылка: видно трафик, можно выключить одного, остальные работают.\n\n"
+            f"🌐 <b>WEB-ссылка</b> — {st(web)}\n"
+            "Новый вид прокси Telegram: снаружи это обычный сайт. Нужен свой домен.")
     rows = []
     if old.get("installed"):
         rows.append([btn("🔗 Общая: ссылка и QR", "tgp:link"), btn("🗑 Убрать общую", "tgp:rm")])
@@ -800,7 +802,90 @@ def tgp_screen(chat):
         rows.append([btn("👤 Личные: список людей", "tgu:menu")])
     else:
         rows.append([btn("👤 Поставить личные ссылки", "tgu:install")])
+    rows.append([btn("🌐 WEB-ссылка", "tgw:menu")])
     send(chat, text, {"inline_keyboard": rows})
+
+
+# ── WEB-прокси (tproxy-server + официальный MTProxy) ──
+TGW_ABOUT = ("🌐 <b>WEB-ссылка</b> — новый вид прокси Telegram (WEB Proxy).\n\n"
+             "Telegram ходит по HTTPS на твой сайт <code>{host}</code> — для провайдера это обычный сайт. "
+             "Может пригодиться, если обычные прокси начнут резать.\n"
+             "Нужно новое приложение Telegram: старое скажет «прокси не поддерживается».\n\n"
+             "Ставится долго: сборка из исходников, 5–10 минут и ~1,5 ГБ на диске.\n"
+             "Звонков нет, как у любого прокси.")
+
+
+def tgw_screen(chat):
+    info = kb_json("tgweb", "info")
+    if info.get("installed"):
+        st = "работает ✅" if info.get("running") else "не запущен ❌"
+        send(chat, f"🌐 <b>WEB-ссылка</b> — {st}\nСайт: <code>{esc(info.get('host', ''))}</code>",
+             inline([btn("🔗 Ссылка и QR", "tgw:link"), btn("📊 Состояние", "tgw:status")],
+                    [btn("🗑 Убрать WEB-ссылку", "tgw:rm"), btn("◀️ Назад", "tgp:menu")]))
+        return
+    if not info.get("safe"):
+        send(chat, TGW_ABOUT.format(host="tg.твой-домен") + "\n\n⚠️ Сначала положи <b>домен</b> и <b>ключ Cloudflare</b> в 🔐 Сейф.",
+             inline([btn("🔐 Открыть сейф", "safe:open")], [btn("◀️ Назад", "tgp:menu")]))
+        return
+    text = TGW_ABOUT.format(host=esc(info.get("want_host", "")))
+    if info.get("vless") and not info.get("vless_domain"):
+        text += ("\n\n⚠️ Вход на сайт держит 🔑 VLESS, а он сейчас на чужой маске "
+                 f"({esc(info.get('vless_mask', ''))}). Переведу его на твой домен — "
+                 "<b>ключи у всех VLESS-устройств сменятся</b>, QR придётся отсканировать заново.")
+        rows = [[btn("🚀 Ставить (ключи VLESS сменятся)", "tgw:go1")]]
+    else:
+        if not info.get("vless"):
+            text += "\n\nЗаодно поставлю 🔑 VLESS на твоём домене — через него идёт вход на сайт."
+        rows = [[btn("🚀 Поставить", "tgw:go")]]
+    rows.append([btn("◀️ Назад", "tgp:menu")])
+    send(chat, text, {"inline_keyboard": rows})
+
+
+def tgw_send_link(chat):
+    code, link = kb("tgweb", "link", timeout=30)
+    if code != 0:
+        send(chat, "❌ " + esc(last_line(link)), inline([btn("◀️ Назад", "tgw:menu")]))
+        return
+    qcode, png = kb_raw("tgweb", "qr-png")
+    if qcode == 0 and png:
+        send_file(chat, "sendPhoto", "photo", "telegram-web-proxy.png", png,
+                  "QR: открой камерой телефона, где стоит Telegram", "image/png")
+    send(chat, f"WEB-ссылка — нажми её на устройстве с Telegram:\n{esc(last_line(link))}\n\n"
+               "Telegram старой версии её не поймёт — обнови приложение.",
+         inline([btn("🔁 Прислать ещё раз", "tgw:link"), btn("◀️ Назад", "tgw:menu")]))
+
+
+def tgw_callback(chat, data):
+    if data in ("tgw:go", "tgw:go1"):
+        def job():
+            env = {"KB_SERVER_IP": aip_info().get("server_ip", "")}
+            if data == "tgw:go1":
+                env["KB_TGW_SWITCH"] = "1"
+            code, out = kb("tgweb", "install", env=env, timeout=2400)
+            os.makedirs(LOG_DIR, exist_ok=True)
+            with open(os.path.join(LOG_DIR, "tgweb-install.log"), "w") as f:
+                f.write(out)
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-20:]), "❌ Не встало. Последние строки:",
+                         inline([btn("🔁 Попробовать снова", data)], [btn("◀️ Назад", "tgw:menu")]))
+                return
+            send_pre(chat, "\n".join(out.splitlines()[-10:]), "✅ WEB-ссылка готова.")
+            if data == "tgw:go1":
+                vls_after_switch(chat, "VLESS теперь на своём домене", "🔑 VLESS переехал на твой домен.")
+            tgw_send_link(chat)
+        run_long(chat, "Ставлю WEB-ссылку: собираю из исходников, 5–10 минут. Напишу, как закончу.", job)
+    elif data == "tgw:link":
+        tgw_send_link(chat)
+    elif data == "tgw:status":
+        send_pre(chat, kb("tgweb", "status", timeout=60)[1], "📊 WEB-ссылка", inline([btn("◀️ Назад", "tgw:menu")]))
+    elif data == "tgw:rm":
+        send(chat, "🗑 Убрать WEB-ссылку? Она перестанет работать у всех, кому ты её давал.",
+             inline([btn("Да, убрать", "tgw:rmok")], [btn("◀️ Назад", "tgw:menu")]))
+    elif data == "tgw:rmok":
+        send_pre(chat, kb("tgweb", "remove", timeout=180)[1], "🗑 Готово")
+        tgp_screen(chat)
+    elif data == "tgw:menu":
+        tgw_screen(chat)
 
 
 # ── прокси по именам (telemt) ──
@@ -1065,6 +1150,8 @@ def on_callback(q):
         warp_callback(chat, data)
     elif data.startswith("tgp:"):
         tgp_callback(chat, data)
+    elif data.startswith("tgw:"):
+        tgw_callback(chat, data)
     elif data.startswith("tgu:"):
         tgu_callback(chat, data)
 

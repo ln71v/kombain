@@ -335,6 +335,11 @@ vls_site_write() {
 	default_sni $host
 	servers {
 		protocols h1 h2
+		# read_body выше long poll WEB-прокси (25 с), иначе его обрежет
+		timeouts {
+			read_header 10s
+			read_body 60s
+		}
 	}
 }
 
@@ -346,6 +351,9 @@ https://$host:$VLS_SITE_PORT {
 	file_server
 	header -Server
 }
+
+# Другие сайты Комбайна на этом же входе (например, WEB-прокси Telegram): *.caddy рядом
+import $VLS_SITE/*.caddy
 EOF
   chmod 0644 "$VLS_SITE/Caddyfile"
   cat >"$VLS_SITE_UNIT" <<EOF
@@ -361,6 +369,7 @@ StateDirectory=kombain-site
 Environment=HOME=/var/lib/kombain-site XDG_DATA_HOME=/var/lib/kombain-site XDG_CONFIG_HOME=/var/lib/kombain-site
 LoadCredential=fullchain.pem:$VLS_LE/live/$host/fullchain.pem
 LoadCredential=privkey.pem:$VLS_LE/live/$host/privkey.pem
+$(cat "$VLS_SITE"/*.cred 2>/dev/null)
 ExecStart=$VLS_CADDY run --config $VLS_SITE/Caddyfile --adapter caddyfile
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -373,8 +382,17 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  CREDENTIALS_DIRECTORY="$VLS_LE/live/$host" "$VLS_CADDY" validate --config "$VLS_SITE/Caddyfile" \
-    --adapter caddyfile >/dev/null 2>&1 || { err "Caddy не принял настройки сайта."; return 1; }
+  # Проверка: все сертификаты из LoadCredential — ярлыками во временной папке
+  local cdir l name path ok_=0; cdir=$(mktemp -d)
+  ln -s "$VLS_LE/live/$host/fullchain.pem" "$cdir/fullchain.pem"; ln -s "$VLS_LE/live/$host/privkey.pem" "$cdir/privkey.pem"
+  while IFS= read -r l; do
+    l="${l#LoadCredential=}"; name="${l%%:*}"; path="${l#*:}"
+    [ -n "$name" ] && [ -n "$path" ] && ln -s "$path" "$cdir/$name"
+  done < <(cat "$VLS_SITE"/*.cred 2>/dev/null)
+  CREDENTIALS_DIRECTORY="$cdir" "$VLS_CADDY" validate --config "$VLS_SITE/Caddyfile" \
+    --adapter caddyfile >/dev/null 2>&1 && ok_=1
+  rm -rf "${cdir:?}"
+  [ "$ok_" = 1 ] || { err "Caddy не принял настройки сайта."; return 1; }
 }
 
 # Отвечает ли сайт по-настоящему: правильный сертификат и код 200. $2 — порт (8080 или 443).
@@ -448,6 +466,7 @@ vls_domain_off() {
   vls_installed || { err "VLESS не установлен."; return 1; }
   vls_load_env
   [ -n "${VLS_DOMAIN:-}" ] || { ok "VLESS и так на маске $VLS_SNI"; return 0; }
+  [ -f "$VLS_SITE/tgweb.caddy" ] && { err "На своём домене живёт Telegram WEB-прокси. Сначала убери его (✈️ Telegram)."; return 1; }
   VLS_SNI="$VLS_SNI_DEFAULT"; VLS_TARGET=""; VLS_DOMAIN=""
   vls_save_env
   vls_write_conf && vls_restart || return 1
@@ -455,6 +474,16 @@ vls_domain_off() {
   systemctl disable --now kombain-site >/dev/null 2>&1
   ok "VLESS снова на маске $VLS_SNI. Сертификат оставила — пригодится, если вернёшься."
   warn "Ключи у всех устройств поменялись — пришли каждому новый QR."
+}
+
+# Пересобрать сайт (после того как другой модуль положил/убрал свой *.caddy) и перезапустить
+vls_site_reload() {
+  vls_load_env
+  [ -n "${VLS_DOMAIN:-}" ] || { err "VLESS не на своём домене."; return 1; }
+  [ -n "${VLS_TARGET:-}" ] && VLS_SITE_PORT="${VLS_TARGET##*:}"
+  vls_site_write "$VLS_DOMAIN" || return 1
+  systemctl restart kombain-site; sleep 2
+  systemctl is-active --quiet kombain-site || { err "Сайт не запустился: journalctl -u kombain-site -n 30"; return 1; }
 }
 
 vls_site_remove() {
@@ -535,6 +564,7 @@ vls_status() {
 
 vls_remove_core() {
   vls_installed || { warn "VLESS не установлен."; return 0; }
+  [ -f "$VLS_SITE/tgweb.caddy" ] && { err "Через VLESS работает Telegram WEB-прокси. Сначала убери его (✈️ Telegram)."; return 1; }
   vls_load_env
   vls_site_remove   # сертификат не удаляем: им может пользоваться и другое (nginx, Telegram WEB Proxy)
   systemctl disable --now kombain-xray >/dev/null 2>&1
