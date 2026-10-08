@@ -58,7 +58,7 @@ vls_get_bin() {
 vls_port443() {
   local o; o=$(port_owner 443 tcp)
   if [ -z "$o" ]; then echo free
-  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "kombain-nginx" && [ "$o" = "nginx" ]; then echo our-nginx
+  elif grep -qx "kombain-nginx" <<<"$(docker ps --format '{{.Names}}' 2>/dev/null)" && [ "$o" = "nginx" ]; then echo our-nginx
   else echo "$o"; fi
 }
 
@@ -214,7 +214,7 @@ vls_install_core() {
   ok "VLESS работает: $VLS_ENDPOINT:443, маска $VLS_SNI"
 
   fw_register vless "443/tcp"
-  if ufw status 2>/dev/null | grep -q '^Status: active'; then fw_apply; fi
+  if grep -q '^Status: active' <<<"$(ufw status 2>/dev/null)"; then fw_apply; fi
 }
 
 # ───────────────────────── клиенты ─────────────────────────
@@ -234,7 +234,7 @@ vls_link() {
 vls_add_client() {
   local name="$1" id
   vls_valid_client "$name" || { err "Имя: маленькие латинские буквы, цифры и дефис. Пример: vasya-phone"; return 1; }
-  vls_clients | grep -qx "$name" && { err "Устройство $name уже есть."; return 1; }
+  grep -qx "$name" <<<"$(vls_clients)" && { err "Устройство $name уже есть."; return 1; }
   vls_load_env
   id=$("$VLS_BIN" uuid)
   cp -a "$VLS_DIR/clients.json" "$VLS_DIR/clients.json.bak"
@@ -247,7 +247,7 @@ vls_add_client() {
 
 vls_remove_client() {
   local name="$1"
-  vls_valid_client "$name" && vls_clients | grep -qx "$name" || { err "Нет такого устройства: $name"; return 1; }
+  vls_valid_client "$name" && grep -qx "$name" <<<"$(vls_clients)" || { err "Нет такого устройства: $name"; return 1; }
   vls_load_env
   cp -a "$VLS_DIR/clients.json" "$VLS_DIR/clients.json.bak"
   jq --arg n "$name" 'map(select(.name != $n))' "$VLS_DIR/clients.json.bak" >"$VLS_DIR/clients.json"

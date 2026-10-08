@@ -26,7 +26,7 @@ tgp_ip()     { sed -n 's/^public-ipv4 = "\([0-9.]*\)"$/\1/p' "$TGP_CONF" 2>/dev/
 tgp_link_tg()  { printf 'tg://proxy?server=%s&port=%s&secret=%s' "$(tgp_ip)" "$TGP_PORT" "$(tgp_secret)"; }
 tgp_link_web() { printf 'https://t.me/proxy?server=%s&port=%s&secret=%s' "$(tgp_ip)" "$TGP_PORT" "$(tgp_secret)"; }
 
-tgp_bin_ok() { [ -x "$TGP_BIN" ] && "$TGP_BIN" --version 2>/dev/null | grep -q "^$TGP_VER "; }
+tgp_bin_ok() { [ -x "$TGP_BIN" ] && grep -q "^$TGP_VER " <<<"$("$TGP_BIN" --version 2>/dev/null)"; }
 
 tgp_get_bin() {
   tgp_bin_ok && return 0
@@ -121,7 +121,7 @@ EOF
   systemctl enable --now telegram-mtg >/dev/null 2>&1
 
   fw_register tgproxy "$TGP_PORT/tcp"
-  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "^Status: active"; then
+  if command -v ufw >/dev/null 2>&1 && grep -q "^Status: active" <<<"$(ufw status 2>/dev/null)"; then
     ufw allow "$TGP_PORT/tcp" >/dev/null
   fi
 

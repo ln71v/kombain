@@ -173,7 +173,7 @@ warp_set() {
   local proto="$1" name="$2" want="$3"
   warp_installed || { err "Сначала установи WARP."; return 1; }
   [[ "$proto" =~ ^(vless|awg)$ ]] && [[ "$name" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { err "Нет такого устройства"; return 1; }
-  warp_devices | grep -q "^$proto $name " || { err "Нет такого устройства: $proto $name"; return 1; }
+  grep -q "^$proto $name " <<<"$(warp_devices)" || { err "Нет такого устройства: $proto $name"; return 1; }
   grep -vx "$proto $name" "$WARP_USERS" >"$WARP_USERS.new" 2>/dev/null
   [ "$want" = on ] && echo "$proto $name" >>"$WARP_USERS.new"
   mv -f "$WARP_USERS.new" "$WARP_USERS"
