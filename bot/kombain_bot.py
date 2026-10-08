@@ -43,10 +43,10 @@ def read_version():
 VERSION = read_version()
 
 B_AI, B_SAFE, B_SERVER, B_HELP = "🧠 Нейронки", "🔐 Сейф", "📊 Сервер", "❓ Помощь"
-B_AWG, B_VLS, B_WARP = "🛡 AmneziaWG", "🔑 VLESS", "🌐 WARP"
+B_AWG, B_VLS, B_WARP, B_TGP = "🛡 AmneziaWG", "🔑 VLESS", "🌐 WARP", "✈️ Telegram"
 MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_VLS}, {"text": B_AWG}],
                         [{"text": B_WARP}, {"text": B_SAFE}, {"text": B_SERVER}],
-                        [{"text": B_HELP}]],
+                        [{"text": B_TGP}, {"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
 CLIENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -723,6 +723,60 @@ def warp_callback(chat, data):
         warp_screen(chat)
 
 
+# ───────────────────────── Telegram-прокси ─────────────────────────
+TGP_ABOUT = ("✈️ <b>Telegram-прокси</b> — Telegram без VPN, когда он не грузится.\n\n"
+             "Одна ссылка: нажал — Telegram спросит «Подключить прокси?» → «Подключить». Всё.\n"
+             "Работает: сообщения, фото, видео, кружки, голосовые.\n"
+             "Не работает: звонки — они идут мимо прокси. Для звонков нужен VPN.")
+
+
+def tgp_screen(chat):
+    info = kb_json("tgproxy", "info")
+    if not info.get("installed"):
+        send(chat, TGP_ABOUT, inline([btn("🚀 Установить", "tgp:install")]))
+        return
+    state_txt = "работает ✅" if info.get("running") else "остановлен ❌"
+    send(chat, f"✈️ <b>Telegram-прокси</b> — {state_txt}, порт {info.get('port', '')}",
+         inline([btn("🔗 Ссылка и QR", "tgp:link")], [btn("🗑 Удалить", "tgp:rm")]))
+
+
+def tgp_send_link(chat):
+    info = kb_json("tgproxy", "info")
+    if not info.get("installed"):
+        tgp_screen(chat)
+        return
+    code, png = kb_raw("tgproxy", "qr-png")
+    if code == 0 and png:
+        send_file(chat, "sendPhoto", "photo", "telegram-proxy.png", png,
+                  "QR: открой камерой телефона, где стоит Telegram", "image/png")
+    send(chat, f"Ссылка — нажми её на устройстве с Telegram или перешли тому, кому нужно:\n{esc(info['web'])}\n\n"
+               "Звонки через прокси не работают — для них нужен VPN.",
+         inline([btn("🔁 Прислать ещё раз", "tgp:link"), btn("◀️ Назад", "tgp:menu")]))
+
+
+def tgp_callback(chat, data):
+    if data == "tgp:install":
+        def job():
+            code, out = kb("tgproxy", "install", timeout=300)
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-15:]), "❌ Не встало. Последние строки:",
+                         inline([btn("🚀 Попробовать снова", "tgp:install")]))
+                return
+            send(chat, "✅ Telegram-прокси работает.")
+            tgp_send_link(chat)
+        run_long(chat, "Ставлю Telegram-прокси. Это минута.", job)
+    elif data == "tgp:link":
+        tgp_send_link(chat)
+    elif data == "tgp:rm":
+        send(chat, "🗑 Удалить Telegram-прокси? Ссылка перестанет работать у всех, кому ты её давал.",
+             inline([btn("Да, удалить", "tgp:rmok")], CANCEL))
+    elif data == "tgp:rmok":
+        send_pre(chat, kb("tgproxy", "remove", timeout=60)[1], "🗑 Готово")
+        tgp_screen(chat)
+    elif data == "tgp:menu":
+        tgp_screen(chat)
+
+
 # ───────────────────────── обновление Комбайна ─────────────────────────
 UPD_FLAG = "/opt/kombain/bot/updated"   # кому сказать «готово» после перезапуска
 
@@ -770,8 +824,9 @@ HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🔑 <b>VLESS</b> — VPN под видом обычного сайта, режут реже всего.\n"
         "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
         "🌐 <b>WARP</b> — выход через Cloudflare: включаешь по устройствам.\n"
+        "✈️ <b>Telegram</b> — прокси, чтобы Telegram работал без VPN.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
-        "Скоро здесь же: Telegram-прокси.\n\n"
+        "\n"
         "Обновить Комбайн — /update или «📊 Сервер» → «🔄 Обновить».\n"
         "Отменить любой шаг — /cancel.")
 
@@ -790,7 +845,7 @@ def on_message(m):
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
         return
-    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_VLS: vls_screen, B_WARP: warp_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
+    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_VLS: vls_screen, B_WARP: warp_screen, B_TGP: tgp_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
                B_HELP: lambda c: send(c, HELP, MAIN_KB)}
     if text in screens:
         state.pop(chat, None)
@@ -832,6 +887,8 @@ def on_callback(q):
         upd_callback(chat, data)
     elif data.startswith("warp:"):
         warp_callback(chat, data)
+    elif data.startswith("tgp:"):
+        tgp_callback(chat, data)
 
 
 def claim(m):
