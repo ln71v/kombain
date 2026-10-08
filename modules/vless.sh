@@ -10,7 +10,7 @@
 #  - Свой бинарник и своя служба (kombain-xray), чужой xray на сервере не трогаем.
 #  - Позже: вариант «свой домен + сайт-заглушка» (нужен домен).
 
-VLS_VER="v26.9.30"
+VLS_VER="v26.2.6"   # как на Германии (3x-ui): с ней Hiddify дружит, с 26.9.30 — нет
 VLS_URL="https://github.com/XTLS/Xray-core/releases/download/$VLS_VER/Xray-linux-64.zip"
 VLS_BIN="/usr/local/lib/kombain/xray"
 VLS_DIR="$KB_HOME/vless"
