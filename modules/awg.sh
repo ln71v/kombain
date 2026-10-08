@@ -14,7 +14,7 @@ AWG_CLIENTS="$AWG_DIR/clients"
 AWG_ENV="$AWG_DIR/env"
 AWG_IF="awg0"
 AWG_CONF="/etc/amnezia/amneziawg/$AWG_IF.conf"
-AWG_PORT=443
+AWG_PORT="${KB_AWG_PORT:-443}"   # свой порт на сервере хранится в env (AWG_PORT)
 AWG_NET="10.8.1"          # 10.8.1.1 — сервер, клиенты с .2
 AWG_MTU=1280              # Amnezia советует 1280 для 3.1
 AWG_SYSCTL="/etc/sysctl.d/99-kombain-awg.conf"
@@ -135,6 +135,7 @@ AWG_JMAX='$AWG_JMAX'
 AWG_S='$AWG_S'
 AWG_ENDPOINT='$AWG_ENDPOINT'
 AWG_WAN='$AWG_WAN'
+AWG_PORT='$AWG_PORT'
 EOF
   )
 }
@@ -261,6 +262,7 @@ awg_show_client() {
 
 awg_status() {
   awg_installed || { warn "AmneziaWG не установлен."; return 0; }
+  awg_load_env
   step "Состояние AmneziaWG"
   if awg_running; then ok "Сервер работает: $(awg_versions)"; else err "Сервер не запущен"; fi
   if [ "$(awg show "$AWG_IF" listen-port 2>/dev/null)" = "$AWG_PORT" ]; then ok "Порт $AWG_PORT/udp слушается"
