@@ -259,8 +259,9 @@ def safe_screen(chat):
     if info.get("installed"):
         text += "\n🧠 Нейронки уже стоят."
     elif ready:
-        text += "\n🎉 <b>Всё собрано!</b> Жми кнопку и жди."
-        rows.insert(0, [btn("🚀 Всё собрано — устанавливай", "safe:go")])
+        text += ("\n🎉 <b>Всё собрано!</b> Для 🧠 Нейронок — кнопка ниже. "
+                 "Для 🔑 VLESS со своим доменом — иди в 🔑 VLESS → «🌐 Свой домен».")
+        rows.insert(0, [btn("🧠 Установить нейронки", "safe:go")])
     # заменить уже положенное
     swap = [b for ok, b in ((domain, btn("Сменить домен", "safe:put:domain")),
                             (has_key, btn("Сменить ключ", "safe:put:cf")),
