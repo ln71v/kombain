@@ -6,7 +6,7 @@
 Только стандартная библиотека Python.
 
 Установка идёт в два этапа:
-  1. Сбор — всё нужное складываем в «Сейф» (домен, ключ, имя телефона).
+  1. Сбор — всё нужное складываем в «Сейф» (домен, ключ, название телефона).
      Записи в Cloudflare бот делает сам по ключу.
      Сейф переживает что угодно: можно закрыть чат и вернуться завтра.
   2. Одна кнопка «Устанавливай» — и ждёшь.
@@ -214,7 +214,7 @@ def safe_screen(chat):
             "Можно закрыть чат и вернуться завтра — собранное никуда не денется.\n\n"
             f"{mark(domain)} 1. Домен{': ' + esc(domain) if domain else ''}\n"
             f"{mark(has_key)} 2. Ключ Cloudflare{': ' + esc(safe['cloudflare']) if has_key else ''}\n"
-            f"{mark(client)} 3. Имя твоего телефона{': ' + esc(client) if client else ''}\n"
+            f"{mark(client)} 3. Название телефона{': ' + esc(client) if client else ''}\n"
             f"{mark(rec)} Записи в Cloudflare — сделаю сама"
             f"{'' if domain and has_key else ' (нужны домен и ключ)'}\n")
     rows = []
@@ -223,7 +223,7 @@ def safe_screen(chat):
     if not has_key:
         rows += [[btn("2️⃣ Где взять ключ", "safe:h:key")], [btn("2️⃣ Положить ключ", "safe:put:cf")]]
     if not client:
-        rows += [[btn("3️⃣ Назвать phone", "safe:client:phone"), btn("3️⃣ Своё имя", "safe:put:client")]]
+        rows += [[btn("3️⃣ Назвать телефон", "safe:put:client")]]
     if domain and has_key and not rec:
         rows += [[btn("🌐 Сделать записи", "safe:mk")]]
 
@@ -236,7 +236,7 @@ def safe_screen(chat):
     # заменить уже положенное
     swap = [b for ok, b in ((domain, btn("Сменить домен", "safe:put:domain")),
                             (has_key, btn("Сменить ключ", "safe:put:cf")),
-                            (client, btn("Сменить имя", "safe:put:client"))) if ok]
+                            (client, btn("Сменить название", "safe:put:client"))) if ok]
     if swap:
         rows.append(swap)
     send(chat, text, {"inline_keyboard": rows} if rows else None)
@@ -256,13 +256,18 @@ def safe_help(chat, what):
 PUT_ASK = {
     "domain": "Вставь сюда <b>свой домен</b>, например <code>mojdns.site</code>.",
     "cf": "Вставь сюда <b>API-ключ Cloudflare</b> — длинную строку после «Create Token» → «Copy».\n\n" + SAFE_WARN,
-    "client": "Как назвать твой телефон? Латиницей, например <code>vasya-phone</code>.",
+    "client": ("📱 <b>Как назвать телефон, с которого будешь заходить в нейронки?</b>\n\n"
+               "Это просто подпись в списке устройств — чтобы потом отличать: "
+               "вот мой телефон, вот ноут, вот мамин.\n"
+               "Латиницей, без пробелов. Например <code>vasya-phone</code>.\n\n"
+               "Лень думать — жми кнопку, назову просто <code>phone</code>."),
 }
 
 
 def safe_put_ask(chat, what):
     state[chat] = {"step": f"put_{what}"}
-    send(chat, PUT_ASK[what], inline(CANCEL))
+    extra = [btn("Назови просто phone", "safe:client:phone")] if what == "client" else None
+    send(chat, PUT_ASK[what], inline(extra, CANCEL))
 
 
 def safe_put(chat, what, text, msg_id):
