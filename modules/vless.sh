@@ -28,7 +28,8 @@ VLS_CADDY_URL="https://github.com/caddyserver/caddy/releases/download/$VLS_CADDY
 VLS_CADDY_SUMS="https://github.com/caddyserver/caddy/releases/download/$VLS_CADDY_VER/caddy_${VLS_CADDY_VER#v}_checksums.txt"
 VLS_CADDY="/usr/local/lib/kombain/caddy"
 VLS_SITE="/usr/local/share/kombain-site"   # не секрет: страница и Caddyfile, читает служба без прав root
-VLS_SITE_PORT=8080
+VLS_SITE_PORT=8080                # первый свободный из VLS_SITE_PORTS (8080 бывает занят чужим)
+VLS_SITE_PORTS="8080 8090 18080 28080"
 VLS_SITE_UNIT="/etc/systemd/system/kombain-site.service"
 VLS_LE="/etc/letsencrypt"
 
@@ -383,14 +384,21 @@ vls_domain_on() {
   local host token ip old_env
   host=$(sec_domain); token=$(sec_cf_token)
   [ -n "$host" ] && [ -n "$token" ] || { err "Сначала заполни сейф: домен и ключ Cloudflare."; return 1; }
+  [ -n "${VLS_TARGET:-}" ] && VLS_SITE_PORT="${VLS_TARGET##*:}"
   if [ "${VLS_DOMAIN:-}" = "$host" ] && vls_running && vls_site_check "$host" "$VLS_SITE_PORT"; then
     ok "VLESS уже работает на своём домене $host"; return 0
   fi
   if grep -qiE "^\.?${host//./\\.}$" "$KB_SRC/data/ai-domains.txt" 2>/dev/null; then
     err "Домен $host есть в списке нейронок — так нельзя."; return 1
   fi
-  local o; o=$(port_owner "$VLS_SITE_PORT" tcp)
-  [ -z "$o" ] || [ "$o" = "caddy" ] || { err "Порт $VLS_SITE_PORT занят программой «$o»."; return 1; }
+  local o p found=""
+  for p in $VLS_SITE_PORTS; do
+    o=$(port_owner "$p" tcp)
+    if [ -z "$o" ] || [ "$o" = "caddy" ]; then found=$p; break; fi
+    say "Порт $p занят программой «$o» — беру другой"
+  done
+  [ -n "$found" ] || { err "Все порты для сайта ($VLS_SITE_PORTS) заняты."; return 1; }
+  VLS_SITE_PORT=$found
   ip="$VLS_ENDPOINT"
 
   step "Запись $host в Cloudflare"
