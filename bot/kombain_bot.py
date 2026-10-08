@@ -652,7 +652,49 @@ def server_screen(chat):
            "df -h / | awk 'NR==2 {print \"Диск: занято \" $3 \" из \" $2 \" (\" $5 \")\"}'; "
            "echo; docker ps --format '{{.Names}}: {{.Status}}' 2>/dev/null")
     out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=30).stdout
-    send_pre(chat, out, "📊 <b>Сервер</b>")
+    send_pre(chat, out, f"📊 <b>Сервер</b> · Комбайн {VERSION}",
+             inline([btn("🔄 Обновить Комбайн", "upd:ask")]))
+
+
+# ───────────────────────── обновление Комбайна ─────────────────────────
+UPD_FLAG = "/opt/kombain/bot/updated"   # кому сказать «готово» после перезапуска
+
+
+def upd_callback(chat, data):
+    if data == "upd:ask":
+        send(chat, f"🔄 Сейчас стоит Комбайн <b>{VERSION}</b>.\n\n"
+                   "Скачаю свежую версию с GitHub и перезапущу бота — это секунд 20. "
+                   "VPN, нейронки и ключи не тронет: они работают сами по себе.",
+             inline([btn("✅ Обновить", "upd:go")], CANCEL))
+    elif data == "upd:go":
+        def job():
+            r = subprocess.run([KB, "--update", "cli", "secrets", "info"], capture_output=True, text=True,
+                               timeout=300, stdin=subprocess.DEVNULL,
+                               env={k: v for k, v in os.environ.items() if k != "BOT_TOKEN"})
+            if r.returncode != 0:
+                send_pre(chat, (r.stdout + r.stderr)[-1500:], "❌ Не обновилось. Последние строки:",
+                         inline([btn("🔁 Попробовать ещё раз", "upd:go")]))
+                return
+            with open(UPD_FLAG, "w") as f:
+                f.write(f"{chat} {VERSION}\n")
+            send(chat, "📦 Скачала. Перезапускаю бота…")
+            subprocess.run(["systemd-run", "--on-active=2", "--unit=kombain-bot-update", "--collect",
+                            "systemctl", "restart", "kombain-bot"], capture_output=True)
+        run_long(chat, "Обновляю Комбайн…", job)
+
+
+def upd_report():
+    """После перезапуска: сказать, что обновились, и с какой версии на какую."""
+    try:
+        with open(UPD_FLAG) as f:
+            chat, old = f.read().split()
+        os.remove(UPD_FLAG)
+    except (OSError, ValueError):
+        return
+    if old == VERSION:
+        send(int(chat), f"✅ Готово. Версия та же — <b>{VERSION}</b>, обновлять было нечего.", MAIN_KB)
+    else:
+        send(int(chat), f"✅ Обновилась: <b>{old} → {VERSION}</b>.", MAIN_KB)
 
 
 HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
@@ -662,12 +704,16 @@ HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
         "Скоро здесь же: WARP, Telegram-прокси.\n\n"
+        "Обновить Комбайн — /update или «📊 Сервер» → «🔄 Обновить».\n"
         "Отменить любой шаг — /cancel.")
 
 
 def on_message(m):
     chat = m["chat"]["id"]
     text = m.get("text") or ""
+    if text == "/update":
+        upd_callback(chat, "upd:ask")
+        return
     if text in ("/start", "/menu"):
         state.pop(chat, None)
         send(chat, f"Привет! Я пульт твоего сервера. Комбайн {VERSION}.\nВыбирай внизу 👇", MAIN_KB)
@@ -714,6 +760,8 @@ def on_callback(q):
         awg_callback(chat, data)
     elif data.startswith("vls:"):
         vls_callback(chat, data)
+    elif data.startswith("upd:"):
+        upd_callback(chat, data)
 
 
 def claim(m):
@@ -744,6 +792,10 @@ def claim(m):
 def main():
     offset = 0
     print("kombain bot started", flush=True)
+    try:
+        upd_report()
+    except Exception:
+        traceback.print_exc()
     while True:
         try:
             r = call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "callback_query"])
