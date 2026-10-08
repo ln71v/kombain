@@ -57,6 +57,8 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/modules/vless.sh"
 # shellcheck source=modules/warp.sh
 . "$KB_SRC/modules/warp.sh"
+# shellcheck source=modules/tgusers.sh
+. "$KB_SRC/modules/tgusers.sh"
 
 # Режим для бота: kombain cli <модуль> <команда> [аргументы]
 if [ "${1:-}" = "cli" ]; then
@@ -70,6 +72,7 @@ if [ "${1:-}" = "cli" ]; then
     awg)     awg_cli "$@"; exit $? ;;
     vless)   vls_cli "$@"; exit $? ;;
     warp)    warp_cli "$@"; exit $? ;;
+    tgusers) tgu_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi
