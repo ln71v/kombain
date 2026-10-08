@@ -289,8 +289,17 @@ aip_start_adguard() {
   local body
   body=$(jq -nc --arg u "$AGH_USER" --arg p "$AGH_PASS" \
     '{web:{ip:"127.0.0.1",port:3000}, dns:{ip:"0.0.0.0",port:53}, username:$u, password:$p}')
-  curl -fsS -X POST -H 'Content-Type: application/json' --data "$body" \
-    "$AIP_API/install/configure" >/dev/null || { err "Не смогла выполнить первичную настройку AdGuard"; return 1; }
+  local resp code
+  resp=$(curl -sS -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' --data "$body" \
+    "$AIP_API/install/configure" 2>&1)
+  code=$(tail -n1 <<<"$resp")
+  if [ "$code" != "200" ]; then
+    err "Не смогла выполнить первичную настройку AdGuard (код $code)"
+    say "AdGuard ответил: $(sed '$d' <<<"$resp" | head -c 600)"
+    say "Кто держит порты 53 и 3000:"
+    ss -H -tulnp 2>/dev/null | grep -E ':(53|3000) ' | head -10
+    return 1
+  fi
 
   for _ in $(seq 1 30); do
     aip_api GET /status >/dev/null 2>&1 && break
