@@ -72,8 +72,22 @@ def esc(t):
     return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+HOME_ROW = [{"text": "🏠 Главное меню", "callback_data": "home"}]
+
+
+def with_home(markup):
+    """К любым кнопкам под сообщением добавить «Главное меню» последней строкой."""
+    if not markup or "inline_keyboard" not in markup:
+        return markup
+    rows = [list(r) for r in markup["inline_keyboard"]]
+    if not any(b.get("callback_data") == "home" for r in rows for b in r):
+        rows.append(HOME_ROW)
+    return {**markup, "inline_keyboard": rows}
+
+
 def send(chat, text, markup=None):
     p = {"chat_id": chat, "text": text[:4000], "parse_mode": "HTML", "disable_web_page_preview": True}
+    markup = with_home(markup)
     if markup:
         p["reply_markup"] = markup
     try:
@@ -997,6 +1011,9 @@ def on_callback(q):
     if data == "cancel":
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
+    elif data == "home":
+        state.pop(chat, None)
+        send(chat, f"🏠 Главное меню · Комбайн {VERSION}\nВыбирай кнопкой внизу 👇", MAIN_KB)
     elif data.startswith("safe:"):
         safe_callback(chat, data)
     elif data.startswith("aip:"):
