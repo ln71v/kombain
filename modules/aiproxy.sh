@@ -288,7 +288,9 @@ aip_start_adguard() {
 
   local body
   body=$(jq -nc --arg u "$AGH_USER" --arg p "$AGH_PASS" \
-    '{web:{ip:"127.0.0.1",port:3000}, dns:{ip:"0.0.0.0",port:53}, username:$u, password:$p}')
+    '{web:{ip:"0.0.0.0",port:3000}, dns:{ip:"0.0.0.0",port:53}, username:$u, password:$p}')
+  # Свежий AdGuard не даёт сразу сменить адрес админки: 127.0.0.1:3000 «занят» им же.
+  # Поэтому ставим как есть, а ниже прячем админку на 127.0.0.1 через конфиг.
   local resp code
   resp=$(curl -sS -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' --data "$body" \
     "$AIP_API/install/configure" 2>&1)
@@ -301,10 +303,24 @@ aip_start_adguard() {
     return 1
   fi
 
+  local yaml="$AIP_AGH/conf/AdGuardHome.yaml"
+  for _ in $(seq 1 15); do [ -s "$yaml" ] && break; sleep 1; done
+  [ -s "$yaml" ] || { err "AdGuard не записал свой конфиг"; return 1; }
+  # админка только изнутри сервера: снаружи её не видно
+  docker stop "$AIP_C_AGH" >/dev/null
+  sed -i -E 's#^(  address: )0\.0\.0\.0:3000$#\1127.0.0.1:3000#; s#^(bind_host: )0\.0\.0\.0$#\1127.0.0.1#' "$yaml"
+  docker start "$AIP_C_AGH" >/dev/null
+
+  local ready=0
   for _ in $(seq 1 30); do
-    aip_api GET /status >/dev/null 2>&1 && break
+    aip_api GET /status >/dev/null 2>&1 && { ready=1; break; }
     sleep 2
   done
+  [ "$ready" -eq 1 ] || { err "AdGuard не поднялся после настройки. Логи: docker logs $AIP_C_AGH"; return 1; }
+  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -qE '^(0\.0\.0\.0|\*|\[::\]):3000$'; then
+    err "Админка AdGuard осталась видна снаружи на порту 3000 — дальше не иду"
+    return 1
+  fi
   ok "AdGuard запущен"
 }
 
@@ -574,6 +590,9 @@ aip_install_core() {
   DNS_HOST="dns.$DOMAIN"
   ensure_pkgs curl jq dnsutils openssl cron ufw || return 1
   ensure_docker || return 1
+
+  # хвосты прошлой неудачной попытки — наши же контейнеры, мешают проверке портов
+  docker rm -f "$AIP_C_AGH" "$AIP_C_NGX" >/dev/null 2>&1
 
   step "Проверяю порты"
   aip_free_port53 || return 1
