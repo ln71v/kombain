@@ -53,6 +53,8 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/modules/tgproxy.sh"
 # shellcheck source=modules/awg.sh
 . "$KB_SRC/modules/awg.sh"
+# shellcheck source=modules/vless.sh
+. "$KB_SRC/modules/vless.sh"
 
 # Режим для бота: kombain cli <модуль> <команда> [аргументы]
 if [ "${1:-}" = "cli" ]; then
@@ -64,6 +66,7 @@ if [ "${1:-}" = "cli" ]; then
     bot)     bot_cli "$@"; exit $? ;;
     tgproxy) tgp_cli "$@"; exit $? ;;
     awg)     awg_cli "$@"; exit $? ;;
+    vless)   vls_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi
@@ -79,7 +82,7 @@ ${C_BOLD}${C_CYAN}╔══════════════ КОМБАЙН �
 
  1) Бот — управлять всем из Telegram
  2) Прокси для нейронок (AdGuard + nginx)
- 3) VLESS Reality + сайт-заглушка      ${C_YELLOW}[скоро]${C_RESET}
+ 3) VLESS Reality (маска — чужой сайт)
  4) AmneziaWG 3.1
  5) WARP                               ${C_YELLOW}[скоро]${C_RESET}
  6) Telegram-прокси (если Telegram не грузится)
@@ -91,7 +94,8 @@ EOF
       1) bot_menu ;;
       2) aip_menu ;;
       4) awg_menu ;;
-      3|5) soon ;;
+      3) vls_menu ;;
+      5) soon ;;
       6) tgp_menu ;;
       9) exec "$KB_SRC/kombain.sh" --update ;;
       0) exit 0 ;;

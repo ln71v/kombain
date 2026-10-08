@@ -43,8 +43,8 @@ def read_version():
 VERSION = read_version()
 
 B_AI, B_SAFE, B_SERVER, B_HELP = "🧠 Нейронки", "🔐 Сейф", "📊 Сервер", "❓ Помощь"
-B_AWG = "🛡 AmneziaWG"
-MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_AWG}], [{"text": B_SAFE}, {"text": B_SERVER}],
+B_AWG, B_VLS = "🛡 AmneziaWG", "🔑 VLESS"
+MAIN_KB = {"keyboard": [[{"text": B_AI}, {"text": B_VLS}, {"text": B_AWG}], [{"text": B_SAFE}, {"text": B_SERVER}],
                         [{"text": B_HELP}]],
            "resize_keyboard": True, "is_persistent": True}
 
@@ -540,6 +540,86 @@ def awg_callback(chat, data):
         send_pre(chat, kb("awg", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово")
 
 
+# ───────────────────────── VLESS Reality ─────────────────────────
+VLS_ABOUT = ("🔑 <b>VLESS Reality</b> — VPN, который снаружи выглядит как обычный заход на большой сайт.\n"
+             "Режут его реже всего: работает и там, где AmneziaWG не пускают.\n\n"
+             "Домен не нужен. Приложение: <b>Hiddify</b> или <b>Amnezia VPN</b>.")
+
+
+def vls_screen(chat):
+    info = kb_json("vless", "info")
+    if not info.get("installed"):
+        send(chat, VLS_ABOUT, inline([btn("🚀 Установить", "vls:install")]))
+        return
+    clients = info.get("clients") or []
+    state_txt = "работает ✅" if info.get("running") else "не запущен ❌"
+    send(chat, f"🔑 <b>VLESS Reality</b> — {state_txt}\n"
+               f"Сервер: <code>{esc(info.get('endpoint', ''))}:443</code>, маска {esc(info.get('sni', ''))}\n"
+               f"Устройства ({len(clients)}): {esc(', '.join(clients)) or 'нет'}",
+         inline([btn("➕ Добавить устройство", "vls:add"), btn("📲 Ключ устройства", "vls:pick:show")],
+                [btn("📊 Состояние", "vls:status"), btn("🗑 Удалить устройство", "vls:pick:rm")]))
+
+
+def vls_send_client(chat, name):
+    code, link = kb("vless", "link", name, timeout=30)
+    if code != 0:
+        send(chat, "❌ " + esc(last_line(link)))
+        return
+    qcode, png = kb_raw("vless", "qr-png", name)
+    if qcode == 0 and png:
+        send_file(chat, "sendPhoto", "photo", f"{name}.png", png,
+                  f"QR для «{name}»: Hiddify / Amnezia VPN → «+» → сканировать", "image/png")
+    send(chat, f"Или скопируй ключ и вставь в приложение («+» → из буфера):\n<code>{esc(link.strip())}</code>\n\n"
+               "Никому не пересылай — это ключ от твоего VPN.")
+
+
+def vls_add(chat, text):
+    state.pop(chat, None)
+    name = text.strip().lower()
+    if not CLIENT_RE.match(name):
+        send(chat, "Только маленькие латинские буквы, цифры и дефис.", inline([btn("Ещё раз", "vls:add")]))
+        return
+    code, out = kb("vless", "add-client", name, timeout=60)
+    if code != 0:
+        send_pre(chat, out, "❌ Не добавилось")
+        return
+    vls_send_client(chat, name)
+
+
+def vls_callback(chat, data):
+    if data == "vls:install":
+        def job():
+            code, out = kb("vless", "install", timeout=600,
+                           env={"KB_SERVER_IP": aip_info().get("server_ip", "")})
+            if code != 0:
+                send_pre(chat, "\n".join(out.splitlines()[-25:]), "❌ Не встало. Последние строки:",
+                         inline([btn("🚀 Попробовать снова", "vls:install")]))
+                return
+            send(chat, "✅ VLESS работает. Теперь добавь устройство.", inline([btn("➕ Добавить устройство", "vls:add")]))
+        run_long(chat, "Ставлю VLESS. Это минута.", job)
+    elif data == "vls:add":
+        state[chat] = {"step": "vls_add"}
+        send(chat, "📱 Как назвать устройство? Латиницей, например <code>vasya-phone</code>.\n"
+                   "Это подпись в списке — чтобы отличать телефон, ноут, мамин.", inline(CANCEL))
+    elif data == "vls:status":
+        send_pre(chat, kb("vless", "status", timeout=60)[1], "📊 VLESS")
+    elif data.startswith("vls:pick:"):
+        what = data.split(":")[2]
+        clients = kb_json("vless", "info").get("clients") or []
+        if not clients:
+            send(chat, "Устройств нет. Жми «➕ Добавить устройство».")
+            return
+        send(chat, "Какое устройство?", {"inline_keyboard": [[btn(c, f"vls:{what}:{c}")] for c in clients[:30]]})
+    elif data.startswith("vls:show:"):
+        vls_send_client(chat, data.split(":", 2)[2])
+    elif data.startswith("vls:rm:"):
+        name = data.split(":", 2)[2]
+        send(chat, f"🗑 Удалить «{esc(name)}»? Этот ключ сразу перестанет работать.",
+             inline([btn("Да, удалить", f"vls:rmok:{name}")], CANCEL))
+    elif data.startswith("vls:rmok:"):
+        send_pre(chat, kb("vless", "rm-client", data.split(":", 2)[2], timeout=60)[1], "🗑 Готово")
+
+
 # ───────────────────────── общие экраны ─────────────────────────
 def server_screen(chat):
     cmd = ("echo \"IP: $(curl -4 -fs --max-time 5 https://api.ipify.org)\"; "
@@ -554,9 +634,10 @@ def server_screen(chat):
 HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🧠 <b>Нейронки</b> — ChatGPT, Gemini, Claude без VPN, через DNS.\n"
         "🔐 <b>Сейф</b> — место сбора: сюда складываешь всё для установки, потом одна кнопка.\n"
+        "🔑 <b>VLESS</b> — VPN под видом обычного сайта, режут реже всего.\n"
         "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
         "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
-        "Скоро здесь же: VLESS, WARP, Telegram-прокси.\n\n"
+        "Скоро здесь же: WARP, Telegram-прокси.\n\n"
         "Отменить любой шаг — /cancel.")
 
 
@@ -571,7 +652,7 @@ def on_message(m):
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
         return
-    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
+    screens = {B_AI: ai_screen, B_AWG: awg_screen, B_VLS: vls_screen, B_SAFE: safe_screen, B_SERVER: server_screen,
                B_HELP: lambda c: send(c, HELP, MAIN_KB)}
     if text in screens:
         state.pop(chat, None)
@@ -585,6 +666,8 @@ def on_message(m):
         ai_add_client(chat, text)
     elif step == "awg_add":
         awg_add(chat, text)
+    elif step == "vls_add":
+        vls_add(chat, text)
     else:
         send(chat, "Выбирай кнопкой внизу 👇", MAIN_KB)
 
@@ -605,6 +688,8 @@ def on_callback(q):
         ai_callback(chat, data)
     elif data.startswith("awg:"):
         awg_callback(chat, data)
+    elif data.startswith("vls:"):
+        vls_callback(chat, data)
 
 
 def claim(m):

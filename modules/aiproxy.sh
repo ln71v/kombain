@@ -594,6 +594,9 @@ aip_install_core() {
   # хвосты прошлой неудачной попытки — наши же контейнеры, мешают проверке портов
   docker rm -f "$AIP_C_AGH" "$AIP_C_NGX" >/dev/null 2>&1
 
+  # VLESS Комбайна сидит на 443 сам — уводим его за движок, строка в карте SNI уже будет
+  if declare -F vls_go_behind >/dev/null; then vls_go_behind || return 1; fi
+
   step "Проверяю порты"
   aip_free_port53 || return 1
   aip_check_ports || { err "Освободи порты и запусти установку снова."; return 1; }
