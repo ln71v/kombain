@@ -31,6 +31,45 @@ echo "COUNTRY=$(jf country "$info")"
 echo "CITY=$(jf city "$info")"
 echo "HOST=$(jf hostname "$info")"
 
+# Кто выдал IP (запись в реестре RIPE/ARIN/...) и как адрес видят разные базы
+ip=$(jf ip "$info")
+if [ -n "$ip" ] && command -v python3 >/dev/null 2>&1; then
+  w=$(get "https://stat.ripe.net/data/whois/data.json?resource=$ip")
+  a=$(get "http://ip-api.com/json/$ip?fields=status,countryCode,isp,org,as,hosting,proxy")
+  W="$w" A="$a" python3 - <<'PY' 2>/dev/null
+import json, os
+def clean(v):
+    return " ".join(str(v).split())[:120]
+try:
+    recs = json.loads(os.environ.get("W") or "{}").get("data", {}).get("records", [])
+except Exception:
+    recs = []
+best = {}
+for rec in recs:
+    kv = {}
+    for f in rec:
+        k = f.get("key", "").lower()
+        kv.setdefault(k, f.get("value", ""))
+    if any(k in kv for k in ("inetnum", "netrange", "cidr", "inet6num")):
+        best = kv          # последняя запись — самый узкий блок
+net = best.get("netname", "")
+owner = best.get("org-name") or best.get("orgname") or best.get("descr") or best.get("org") or ""
+print("REG_NET=" + clean(net))
+print("REG_OWNER=" + clean(owner))
+print("REG_COUNTRY=" + clean(best.get("country", "")))
+try:
+    a = json.loads(os.environ.get("A") or "{}")
+except Exception:
+    a = {}
+if a.get("status") == "success":
+    print("IPAPI_ISP=" + clean(a.get("isp", "")))
+    print("IPAPI_ORG=" + clean(a.get("org", "")))
+    print("IPAPI_COUNTRY=" + clean(a.get("countryCode", "")))
+    print("IPAPI_HOSTING=" + ("yes" if a.get("hosting") else "no"))
+    print("IPAPI_PROXY=" + ("yes" if a.get("proxy") else "no"))
+PY
+fi
+
 # Кем видит Google (от этого зависит Gemini)
 yt=$(get https://www.youtube.com/sw.js_data | head -c 3000)
 gl=$(grep -oE '"GL"[^A-Z]{1,6}[A-Z]{2}"' <<<"$yt" | head -n1 | grep -oE '[A-Z]{2}"$' | tr -d '"')

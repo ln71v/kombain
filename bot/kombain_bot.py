@@ -820,12 +820,24 @@ def probe_report(host, d):
     ram = f"{int(ram) / 1024:.1f} ГБ" if ram.isdigit() else "?"
     ai = {k: d.get(k.upper(), "?") for k in ("ChatGPT", "Claude", "Gemini")}
     lines = [f"🔍 <b>Новый сервер</b> <code>{esc(d.get('IP') or host)}</code>", "",
-             f"📍 Страна по базам: <b>{esc(country)}</b>{', ' + esc(d['CITY']) if d.get('CITY') else ''}",
-             f"🏢 Сеть: <b>{esc(org or '?')}</b>"]
+             f"🏢 Сеть (AS): <b>{esc(org or '?')}</b>"]
+    reg = " · ".join(x for x in (d.get("REG_OWNER"), d.get("REG_NET")) if x)
+    if reg:
+        lines.append(f"📄 Кто выдал IP (реестр): <b>{esc(reg)}</b>")
+    if d.get("IPAPI_ISP"):
+        isp = d["IPAPI_ISP"] + (f" / {d['IPAPI_ORG']}" if d.get("IPAPI_ORG") and d["IPAPI_ORG"] != d["IPAPI_ISP"] else "")
+        lines.append(f"🏠 Провайдер (как на 2ip): {esc(isp)}")
     if d.get("HOST"):
         lines.append(f"🏷 Имя адреса: {esc(d['HOST'])}")
     lines += [f"🖥 {esc(d.get('OS', '?'))} · память {ram} · диск {esc(d.get('DISK', '?'))}", "",
-              f"🌍 Google видит страну: <b>{esc(gl)}</b> {'❌' if gl == 'RU' else ('✅' if gl not in ('?', '') else '❔')}",
+              "🗺 <b>Как видят страну:</b>",
+              f"   ipinfo: {esc(country)}{' (' + esc(d['CITY']) + ')' if d.get('CITY') else ''} · "
+              f"ip-api: {esc(d.get('IPAPI_COUNTRY', '?'))} · реестр: {esc(d.get('REG_COUNTRY', '?'))}",
+              f"   Google: <b>{esc(gl)}</b> {'❌' if gl == 'RU' else ('✅' if gl not in ('?', '') else '❔')}"]
+    marks = [m for k, m in (("IPAPI_HOSTING", "хостинг"), ("IPAPI_PROXY", "прокси/VPN")) if d.get(k) == "yes"]
+    if marks:
+        lines.append(f"🚩 Метки в базах: {', '.join(marks)}" + (" — плохо для нейронок" if "прокси/VPN" in marks else " — это норма для VPS"))
+    lines += ["",
               "🤖 Нейронки (по признакам с сервера):",
               "   " + "  ".join(f"{k} {YES_NO.get(v, '❔')}" for k, v in ai.items()), ""]
     if asn in PROBE_BAD:
