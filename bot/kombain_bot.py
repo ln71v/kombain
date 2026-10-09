@@ -11,9 +11,11 @@
      Сейф переживает что угодно: можно закрыть чат и вернуться завтра.
   2. Одна кнопка «Устанавливай» — и ждёшь.
 """
+import ipaddress
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -705,7 +707,142 @@ def server_screen(chat):
            "echo; docker ps --format '{{.Names}}: {{.Status}}' 2>/dev/null")
     out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=30).stdout
     send_pre(chat, out, f"📊 <b>Сервер</b> · Комбайн {VERSION}",
-             inline([btn("🔄 Обновить Комбайн", "upd:ask")]))
+             inline([btn("🔄 Обновить Комбайн", "upd:ask")],
+                    [btn("➕ Новый сервер — проверить", "probe:ask")]))
+
+
+# ───────────────────────── Проверка нового сервера ─────────────────────────
+# Купил сервер → IP и пароль → бот заходит туда по SSH, гоняет lib/probe-remote.sh и пишет отчёт.
+# Пароль не сохраняется. На проверяемый сервер ничего не ставится (кроме curl, если его нет).
+PROBE_SCRIPT = os.path.join(KB_SRC, "lib", "probe-remote.sh")
+PROBE_BAD = {   # сети, которые сразу в мусор
+    "AS215540": "в этой сети выходные узлы Tor и прокси-сервисы — нейронки такие адреса режут",
+    "AS210644": "Aeza — под санкциями США, нейронки режут",
+    "AS216246": "Aeza — под санкциями США, нейронки режут",
+    "AS211522": "сеть, куда переехала Aeza после санкций",
+}
+PROBE_WARN = {  # не мусор, но знать надо
+    "AS57043": "HOSTKEY — та же сеть, что у AdminVPS (Италия, Нидерланды). Нейронки пускает, "
+               "но запасным к серверам AdminVPS не годится: забанят сеть — лягут оба.",
+}
+YES_NO = {"yes": "✅", "no": "❌"}
+
+
+def probe_ask(chat):
+    state[chat] = {"step": "probe_host"}
+    send(chat, "➕ <b>Новый сервер — проверка</b>\n\n"
+               "Купил сервер? Пришли его <b>IP</b> (если хостер дал другой порт — <code>IP:порт</code>).\n"
+               "Проверю: чья сеть, кем его видит Google, пускают ли ChatGPT, Claude и Gemini.\n"
+               "На сервер ничего не ставлю.", inline(CANCEL))
+
+
+def probe_host(chat, text):
+    t = text.strip()
+    host, port = t, "22"
+    if t.count(":") == 1:
+        host, port = t.split(":")
+    try:
+        ipaddress.ip_address(host)
+        if not port.isdigit() or not 0 < int(port) < 65536:
+            raise ValueError
+    except ValueError:
+        send(chat, "Это не IP. Пример: <code>203.0.113.10</code> или <code>203.0.113.10:49222</code>",
+             inline(CANCEL))
+        return
+    state[chat] = {"step": "probe_pass", "host": host, "port": port}
+    send(chat, f"🔑 Пароль <b>root</b> от <code>{host}</code> — тот, что прислал хостер.\n\n"
+               "⚠️ Как только придёт — удалю твоё сообщение из чата. Пароль нигде не сохраняю, "
+               "он нужен один раз, чтобы зайти.", inline(CANCEL))
+
+
+def probe_pass(chat, text, msg_id):
+    delete(chat, msg_id)
+    st = state.pop(chat, {})
+    host, port, password = st.get("host"), st.get("port", "22"), text.strip()
+    if not host or not password:
+        send(chat, "Начни заново.", inline([btn("➕ Новый сервер", "probe:ask")]))
+        return
+
+    def job():
+        report = probe_run(host, port, password)
+        send(chat, report, inline([btn("🔁 Проверить ещё раз", "probe:ask")], [btn("🏠 Меню", "home")]))
+
+    send(chat, "🔐 Сообщение с паролем удалено.")
+    run_long(chat, f"Захожу на {host} и проверяю. До двух минут…", job)
+
+
+def probe_run(host, port, password):
+    if not shutil.which("sshpass"):
+        subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], capture_output=True, timeout=300,
+                       env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+        if not shutil.which("sshpass"):
+            subprocess.run(["apt-get", "update", "-qq"], capture_output=True, timeout=300)
+            subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], capture_output=True, timeout=300,
+                           env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+    if not shutil.which("sshpass"):
+        return "❌ Не смогла поставить sshpass на этот сервер — без него не зайти по паролю."
+    with open(PROBE_SCRIPT) as f:
+        script = f.read()
+    env = {k: v for k, v in os.environ.items() if k != "BOT_TOKEN"}
+    env["SSHPASS"] = password
+    cmd = ["sshpass", "-e", "ssh", "-p", port,
+           "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+           "-o", "ConnectTimeout=20", "-o", "PubkeyAuthentication=no",
+           "-o", "PreferredAuthentications=password,keyboard-interactive",
+           "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
+           f"root@{host}", "bash -s"]
+    try:
+        r = subprocess.run(cmd, input=script, capture_output=True, text=True, timeout=240, env=env)
+    except subprocess.TimeoutExpired:
+        return f"❌ <code>{host}</code>: проверка не уложилась в 4 минуты. Связь плохая или сервер висит."
+    finally:
+        env.pop("SSHPASS", None)
+    if r.returncode == 5:
+        return f"❌ <code>{host}</code>: неверный пароль. Скопируй его у хостера ещё раз."
+    if "PROBE_BEGIN" not in r.stdout:
+        why = esc((r.stderr or r.stdout).strip()[-300:]) or "без объяснений"
+        return (f"❌ Не зашла на <code>{host}</code>:{port}.\n<pre>{why}</pre>\n"
+                "Проверь IP и порт. Сервер мог ещё не подняться — подожди пару минут.")
+    d = {}
+    for line in r.stdout.split("PROBE_BEGIN", 1)[1].split("PROBE_END", 1)[0].splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            if v.strip():
+                d[k.strip()] = v.strip()
+    return probe_report(host, d)
+
+
+def probe_report(host, d):
+    org = d.get("ORG", "")
+    asn = org.split()[0] if org.startswith("AS") else ""
+    gl, country = d.get("GL", "?"), d.get("COUNTRY", "?")
+    ram = d.get("RAM_MB", "")
+    ram = f"{int(ram) / 1024:.1f} ГБ" if ram.isdigit() else "?"
+    ai = {k: d.get(k.upper(), "?") for k in ("ChatGPT", "Claude", "Gemini")}
+    lines = [f"🔍 <b>Новый сервер</b> <code>{esc(d.get('IP') or host)}</code>", "",
+             f"📍 Страна по базам: <b>{esc(country)}</b>{', ' + esc(d['CITY']) if d.get('CITY') else ''}",
+             f"🏢 Сеть: <b>{esc(org or '?')}</b>"]
+    if d.get("HOST"):
+        lines.append(f"🏷 Имя адреса: {esc(d['HOST'])}")
+    lines += [f"🖥 {esc(d.get('OS', '?'))} · память {ram} · диск {esc(d.get('DISK', '?'))}", "",
+              f"🌍 Google видит страну: <b>{esc(gl)}</b> {'❌' if gl == 'RU' else ('✅' if gl not in ('?', '') else '❔')}",
+              "🤖 Нейронки (по признакам с сервера):",
+              "   " + "  ".join(f"{k} {YES_NO.get(v, '❔')}" for k, v in ai.items()), ""]
+    if asn in PROBE_BAD:
+        lines.append(f"🗑 <b>Удаляй, пока не списали деньги.</b>\n{asn}: {PROBE_BAD[asn]}.")
+    else:
+        if asn in PROBE_WARN:
+            lines.append(f"⚠️ {PROBE_WARN[asn]}")
+        if gl == "RU" or ai["Gemini"] == "no":
+            lines.append("⚠️ <b>Gemini тут не пойдёт.</b> Под VPN, Telegram и ChatGPT/Claude — годится.")
+        elif "?" in (gl, ai["Gemini"]):
+            lines.append("❔ Часть проверок не ответила. Повтори через минуту.")
+        else:
+            lines.append("✅ <b>Похоже, годен.</b> Последнее слово — Gemini вживую с телефона без VPN, "
+                         "после установки нейронок.")
+        if gl not in ("?", "", country) and country not in ("?", ""):
+            lines.append(f"ℹ️ Базы говорят {esc(country)}, а Google считает {esc(gl)} — Google тут главнее.")
+    return "\n".join(lines)
 
 
 # ───────────────────────── WARP ─────────────────────────
@@ -1081,7 +1218,8 @@ HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
         "🌐 <b>WARP</b> — выход через Cloudflare: включаешь по устройствам.\n"
         "✈️ <b>Telegram</b> — прокси, чтобы Telegram работал без VPN.\n"
-        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
+        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n"
+        "➕ <b>Новый сервер</b> — купил сервер? Проверю его до установки: /new\n\n"
         "\n"
         "Обновить Комбайн — /update или «📊 Сервер» → «🔄 Обновить».\n"
         "Отменить любой шаг — /cancel.")
@@ -1096,6 +1234,9 @@ def on_message(m):
     if text in ("/start", "/menu"):
         state.pop(chat, None)
         send(chat, f"Привет! Я пульт твоего сервера. Комбайн {VERSION}.\nВыбирай внизу 👇", MAIN_KB)
+        return
+    if text == "/new":
+        probe_ask(chat)
         return
     if text == "/cancel":
         state.pop(chat, None)
@@ -1119,6 +1260,10 @@ def on_message(m):
         vls_add(chat, text)
     elif step == "tgu_add":
         tgu_add_name(chat, text)
+    elif step == "probe_host":
+        probe_host(chat, text)
+    elif step == "probe_pass":
+        probe_pass(chat, text, m["message_id"])
     else:
         send(chat, "Выбирай кнопкой внизу 👇", MAIN_KB)
 
@@ -1144,6 +1289,8 @@ def on_callback(q):
         awg_callback(chat, data)
     elif data.startswith("vls:"):
         vls_callback(chat, data)
+    elif data == "probe:ask":
+        probe_ask(chat)
     elif data.startswith("upd:"):
         upd_callback(chat, data)
     elif data.startswith("warp:"):
