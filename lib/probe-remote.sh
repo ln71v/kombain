@@ -71,8 +71,13 @@ PY
 fi
 
 # Кем видит Google (от этого зависит Gemini)
-yt=$(get https://www.youtube.com/sw.js_data | head -c 3000)
-gl=$(grep -oE '"GL"[^A-Z]{1,6}[A-Z]{2}"' <<<"$yt" | head -n1 | grep -oE '[A-Z]{2}"$' | tr -d '"')
+yt=$(get https://www.youtube.com/sw.js_data | head -c 5000)
+gl=$(grep -oE '"GL" *[,:]( *null *,)* *"[A-Z]{2}"' <<<"$yt" | head -n1 | grep -oE '"[A-Z]{2}"$' | tr -d '"')
+if [ -z "$gl" ]; then   # запасной способ — с главной YouTube
+  yh=$(get -H 'Accept-Language: en' https://www.youtube.com/ | head -c 400000)
+  gl=$(grep -oE '"(INNERTUBE_CONTEXT_GL|GL|gl)":"[A-Z]{2}"' <<<"$yh" | head -n1 | grep -oE '"[A-Z]{2}"$' | tr -d '"')
+  [ -z "$gl" ] && gl=$(grep -oE '"countryCode":"[A-Z]{2}"' <<<"$yh" | head -n1 | grep -oE '"[A-Z]{2}"$' | tr -d '"')
+fi
 echo "GL=${gl:-?}"
 
 # Gemini
