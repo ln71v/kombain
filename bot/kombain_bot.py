@@ -1107,9 +1107,12 @@ def srv_probe(chat, ip):
             r = subprocess.run(ssh_base(srv) + ["bash -s"], input=script, capture_output=True, text=True,
                                timeout=240)
         except subprocess.TimeoutExpired:
-            send(chat, "❌ Проверка не уложилась в 4 минуты.")
+            send(chat, "❌ Проверка не уложилась в 4 минуты.",
+                 inline([btn("🔁 Ещё раз", f"srv:probe:{ip}"), btn("🗂 Мои серверы", "srv:list")]))
             return
-        send(chat, probe_parse(ip, srv["port"], r)[1])
+        send(chat, probe_parse(ip, srv["port"], r)[1],
+             inline([btn("◀️ К серверу", f"srv:open:{ip}"), btn("🗂 Мои серверы", "srv:list")],
+                    [btn("🏠 Вернуться к своему серверу", "srv:local")]))
     run_long(chat, f"Проверяю {ip}…", job)
 
 
@@ -1189,7 +1192,8 @@ def probe_report(host, d):
     ram = d.get("RAM_MB", "")
     ram = f"{int(ram) / 1024:.1f} ГБ" if ram.isdigit() else "?"
     ai = {k: d.get(k.upper(), "?") for k in ("ChatGPT", "Claude", "Gemini")}
-    lines = [f"🔍 <b>Новый сервер</b> <code>{esc(d.get('IP') or host)}</code>", "",
+    title = "Сервер" if srv_get(host) else "Новый сервер"
+    lines = [f"🔍 <b>{title}</b> <code>{esc(d.get('IP') or host)}</code>", "",
              f"🏢 Сеть (AS): <b>{esc(org or '?')}</b>"]
     reg = " · ".join(x for x in (d.get("REG_OWNER"), d.get("REG_NET")) if x)
     if reg:
