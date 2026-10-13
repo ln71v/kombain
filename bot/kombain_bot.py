@@ -77,8 +77,9 @@ def esc(t):
 
 
 def send(chat, text, markup=None):
-    if TARGET:
-        text = f"🎯 <b>{esc(TARGET['name'])}</b> · {TARGET['ip']}\n" + text
+    t = cur_target()
+    if t:
+        text = f"🎯 <b>{esc(t['name'])}</b> · {t['ip']}\n" + text
     p = {"chat_id": chat, "text": text[:4000], "parse_mode": "HTML", "disable_web_page_preview": True}
     if markup:
         p["reply_markup"] = tag_markup(markup)
@@ -130,8 +131,28 @@ FREE_CB = ("cancel", "home")
 FREE_PREFIX = ("srv:", "probe:")   # в них IP сервера и так прописан явно
 
 
-def srv_tag():
-    return hashlib.sha1(TARGET["ip"].encode()).hexdigest()[:6] if TARGET else "local"
+# Долгая операция запоминает свой сервер при старте: переключишь сервер посреди неё —
+# она доделает своё там, где начала, и кнопки в её ответах будут помечены её сервером.
+_tl = threading.local()
+_NO = object()
+
+
+def cur_target():
+    t = getattr(_tl, "target", _NO)
+    return TARGET if t is _NO else t
+
+
+def set_target(t):
+    """Сменить выбранный сервер (и для операции, которая сейчас идёт в этом потоке)."""
+    global TARGET
+    TARGET = t
+    if getattr(_tl, "target", _NO) is not _NO:
+        _tl.target = t
+
+
+def srv_tag(t=_NO):
+    t = cur_target() if t is _NO else t
+    return hashlib.sha1(t["ip"].encode()).hexdigest()[:6] if t else "local"
 
 
 def tag_markup(markup):
@@ -167,8 +188,9 @@ TO_SAFE = [btn("🔐 Назад в сейф", "safe:open")]
 def kb(*args, env=None, timeout=900):
     """Запустить `kombain.sh cli ...`. Вернуть (код, вывод).
     Выбран другой сервер (🗂 Мои серверы) — команда уходит туда по SSH."""
-    if TARGET:
-        return remote_kb(TARGET, args, env, timeout, text=True)
+    t = cur_target()
+    if t:
+        return remote_kb(t, args, env, timeout, text=True)
     e = dict(os.environ)
     e.pop("BOT_TOKEN", None)
     if env:
@@ -183,8 +205,9 @@ def kb(*args, env=None, timeout=900):
 
 def kb_raw(*args, timeout=60):
     """То же, но вывод байтами (картинка QR)."""
-    if TARGET:
-        code, out = remote_kb(TARGET, args, None, timeout, text=False)
+    t = cur_target()
+    if t:
+        code, out = remote_kb(t, args, None, timeout, text=False)
         return code, out
     try:
         r = subprocess.run([KB, "cli", *args], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL,
@@ -222,7 +245,10 @@ def run_long(chat, title, func):
         send(chat, "⏳ Уже что-то делаю. Дождись конца.")
         return
 
+    target = TARGET
+
     def work():
+        _tl.target = target
         try:
             func()
         except Exception:
@@ -743,14 +769,15 @@ def server_screen(chat):
            "df -h / | awk 'NR==2 {print \"Диск: занято \" $3 \" из \" $2 \" (\" $5 \")\"}'; "
            "echo; docker ps --format '{{.Names}}: {{.Status}}' 2>/dev/null")
     n = len(srv_load())
-    if TARGET:
+    t = cur_target()
+    if t:
         try:
-            out = subprocess.run(ssh_base(TARGET) + [cmd], capture_output=True, text=True, timeout=40,
+            out = subprocess.run(ssh_base(t) + [cmd], capture_output=True, text=True, timeout=40,
                                  stdin=subprocess.DEVNULL).stdout
         except subprocess.TimeoutExpired:
             out = "Сервер не ответил за 40 секунд."
         send_pre(chat, out, "📊 <b>Сервер</b>",
-                 inline([btn("🔄 Обновить Комбайн там", f"srv:upd:{TARGET['ip']}")],
+                 inline([btn("🔄 Обновить Комбайн там", f"srv:upd:{t['ip']}")],
                         [btn(f"🗂 Мои серверы ({n})", "srv:list"), btn("🏠 К стенду", "srv:local")]))
         return
     out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=30).stdout
@@ -1012,15 +1039,11 @@ def srv_list(chat):
 
 
 def srv_open(chat, ip):
-    global TARGET
-    if busy.locked():
-        send(chat, "⏳ Сейчас идёт операция — дождись конца, потом переключай сервер.")
-        return
     srv = srv_get(ip)
     if not srv:
         send(chat, "Такого сервера в списке нет.", inline([btn("🗂 Мои серверы", "srv:list")]))
         return
-    TARGET = srv
+    set_target(srv)
     state.pop(chat, None)   # недописанный ввод относился к прошлому серверу
     send(chat, "Теперь кнопки внизу — 🔑 VLESS, 🛡 AmneziaWG, 🌐 WARP, ✈️ Telegram, 📊 Сервер — работают "
                "<b>с этим сервером</b>. Сверху каждого сообщения будет 🎯 с его именем.\n\n"
@@ -1031,11 +1054,7 @@ def srv_open(chat, ip):
 
 
 def srv_local(chat):
-    global TARGET
-    if busy.locked():
-        send(chat, "⏳ Сейчас идёт операция — дождись конца, потом переключай сервер.")
-        return
-    TARGET = None
+    set_target(None)
     state.pop(chat, None)
     send(chat, "🏠 Снова работаю со своим сервером (где живёт бот).", MAIN_KB)
 
@@ -1089,7 +1108,6 @@ def srv_del(chat, ip, sure=False):
         return
 
     def job():
-        global TARGET
         pub = ensure_key().split()[1]
         try:
             r = subprocess.run(ssh_base(srv) + [f"sed -i '\\#{pub}#d' ~/.ssh/authorized_keys && echo DEL_OK"],
@@ -1099,7 +1117,7 @@ def srv_del(chat, ip, sure=False):
             gone = False
         srv_store([x for x in srv_load() if x["ip"] != ip])
         if TARGET and TARGET["ip"] == ip:
-            TARGET = None
+            set_target(None)
         send(chat, ("✅ Ключ стёрла, сервер забыла." if gone else
                     "⚠️ Сервер забыла, но стереть ключ не вышло (сервер не ответил). Если он ещё жив — "
                     "убери строку kombain-admin из /root/.ssh/authorized_keys руками."), MAIN_KB)
