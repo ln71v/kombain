@@ -49,6 +49,7 @@ func main() {
 		fn   interface{}
 	}{
 		{"loginServer", a.login},
+		{"trustHost", a.trustHost},
 		{"installBot", a.install},
 		{"installerState", func() (Snapshot, error) { return a.snapshot(), nil }},
 		{"retryOwner", a.retryWait},
