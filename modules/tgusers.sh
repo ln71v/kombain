@@ -90,15 +90,45 @@ EOF
   systemctl daemon-reload
 }
 
+tgu_api_up() {
+  tgu_running && grep -q '^200' <<<"$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$TGU_API/users")"
+}
+
+# Бэкап всего, что есть у telemt (конфиг с людьми и их ключами): архив с датой в $KB_BACKUP.
+# Печатает путь к архиву. Нечего сохранять — пустая строка и успех.
+tgu_backup() {
+  local d f
+  d=$(readlink -f "$TGU_STATE" 2>/dev/null)
+  { [ -n "$d" ] && [ -d "$d" ]; } || { echo ""; return 0; }
+  mkdir -p "$KB_BACKUP" && chmod 700 "$KB_BACKUP"
+  f="$KB_BACKUP/telemt-$(date +%Y%m%d-%H%M%S).tar.gz"
+  { tar -czf "$f" -C "$(dirname "$d")" "$(basename "$d")" 2>/dev/null && [ -s "$f" ]; } || return 1
+  chmod 600 "$f"
+  echo "$f"
+}
+
+# Достать из архива раздел [access.users] (люди и их ключи).
+tgu_saved_users() {
+  [ -s "$1" ] || return 0
+  tar -xzOf "$1" --wildcards '*/config.toml' 2>/dev/null \
+    | awk '/^\[access\.users\]/{on=1; next} /^\[/{on=0} on && NF'
+}
+
 tgu_install_core() {
+  local saved="" users="" _t old_port=""
   if tgu_installed; then
-    tgu_running && grep -q '^200' <<<"$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$TGU_API/users")" \
-      && { warn "Уже установлено и работает."; return 0; }
-    warn "Стоит, но не работает — переставляю начисто."
-    tgu_remove_core >/dev/null
+    tgu_load_env; old_port="${TGU_PORT:-}"
+    tgu_api_up && { warn "Уже установлено и работает."; return 0; }
+    warn "Стоит, но не отвечает — пробую просто перезапустить."
+    systemctl restart kombain-telemt >/dev/null 2>&1
+    for _t in $(seq 1 15); do tgu_api_up && { ok "Поднялся после перезапуска, люди на месте."; return 0; }; sleep 1; done
+    saved=$(tgu_backup) || { err "Не смогла сохранить людей и ключи — переустановку отменяю, ничего не трогала."; return 1; }
+    users=$(tgu_saved_users "$saved")
+    warn "Не поднялся — переставляю. Люди и ключи сохранены: $saved"
+    tgu_remove_core --no-backup >/dev/null
   fi
   ensure_pkgs curl jq tar qrencode || return 1
-  local port="${KB_TGU_PORT:-9443}" ip
+  local port="${KB_TGU_PORT:-${old_port:-9443}}" ip   # переустановка — на прежний порт, чтобы ссылки не сменились
   if [ -n "$(port_owner "$port" tcp)" ]; then
     [ -z "${KB_TGU_PORT:-}" ] && [ "$(port_owner "$port" tcp)" = "telegram-mtg" ] && port=9444
     [ -z "$(port_owner "$port" tcp)" ] || { err "Порт $port занят: $(port_owner "$port" tcp)"; return 1; }
@@ -148,8 +178,13 @@ tls_emulation = true
 tls_front_dir = "tlsfront"
 
 [access.users]
-admin = "$(openssl rand -hex 16)"
 EOF
+  if [ -n "$users" ]; then
+    printf '%s\n' "$users" >>"$TGU_CONF"
+    ok "Вернула людей из бэкапа: $(grep -c . <<<"$users") — ссылки прежние, если порт не сменился."
+  else
+    printf 'admin = "%s"\n' "$(openssl rand -hex 16)" >>"$TGU_CONF"
+  fi
   chown "$TGU_USER:$TGU_USER" "$TGU_CONF"; chmod 640 "$TGU_CONF"
   mkdir -p "$(dirname "$TGU_ENV")"
   printf "TGU_PORT='%s'\nTGU_IP='%s'\n" "$port" "$ip" >"$TGU_ENV"
@@ -167,6 +202,10 @@ EOF
 
 tgu_remove_core() {
   tgu_installed || { warn "Не установлено."; return 0; }
+  if [ "${1:-}" != "--no-backup" ]; then
+    local f; f=$(tgu_backup) || { err "Не смогла сделать бэкап людей и ключей — удаление отменяю."; return 1; }
+    [ -n "$f" ] && ok "Бэкап людей и ключей: $f"
+  fi
   systemctl disable --now kombain-telemt >/dev/null 2>&1
   rm -f /etc/systemd/system/kombain-telemt.service; systemctl daemon-reload
   rm -rf /var/lib/kombain-telemt /var/lib/private/kombain-telemt "${KB_HOME:?}/tgusers"

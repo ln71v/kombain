@@ -11,6 +11,7 @@
      Сейф переживает что угодно: можно закрыть чат и вернуться завтра.
   2. Одна кнопка «Устанавливай» — и ждёшь.
 """
+import hashlib
 import ipaddress
 import json
 import os
@@ -80,7 +81,7 @@ def send(chat, text, markup=None):
         text = f"🎯 <b>{esc(TARGET['name'])}</b> · {TARGET['ip']}\n" + text
     p = {"chat_id": chat, "text": text[:4000], "parse_mode": "HTML", "disable_web_page_preview": True}
     if markup:
-        p["reply_markup"] = markup
+        p["reply_markup"] = tag_markup(markup)
     try:
         return call("sendMessage", **p)
     except urllib.error.HTTPError:
@@ -121,6 +122,33 @@ def last_line(out, default=""):
     """Последняя строка вывода без значков ✔ ✖ ! из терминала."""
     line = out.strip().splitlines()[-1] if out.strip() else default
     return line.lstrip("✔✖! ").strip()
+
+
+# Кнопки под сообщением помнят, для какого сервера их нарисовали: в конце «~метка».
+# Нажал старую кнопку после переключения сервера — не выполняю (иначе удалит не там).
+FREE_CB = ("cancel", "home")
+FREE_PREFIX = ("srv:", "probe:")   # в них IP сервера и так прописан явно
+
+
+def srv_tag():
+    return hashlib.sha1(TARGET["ip"].encode()).hexdigest()[:6] if TARGET else "local"
+
+
+def tag_markup(markup):
+    """Перед отправкой дописать метку текущего сервера во все кнопки под сообщением."""
+    if not markup or "inline_keyboard" not in markup:
+        return markup
+    tail = "~" + srv_tag()
+    rows = []
+    for row in markup["inline_keyboard"]:
+        new = []
+        for b in row:
+            d = b.get("callback_data")
+            if d is not None and not (d in FREE_CB or d.startswith(FREE_PREFIX)):
+                b = {**b, "callback_data": d[:64 - len(tail)] + tail}
+            new.append(b)
+        rows.append(new)
+    return {**markup, "inline_keyboard": rows}
 
 
 def btn(text, data):
@@ -985,11 +1013,15 @@ def srv_list(chat):
 
 def srv_open(chat, ip):
     global TARGET
+    if busy.locked():
+        send(chat, "⏳ Сейчас идёт операция — дождись конца, потом переключай сервер.")
+        return
     srv = srv_get(ip)
     if not srv:
         send(chat, "Такого сервера в списке нет.", inline([btn("🗂 Мои серверы", "srv:list")]))
         return
     TARGET = srv
+    state.pop(chat, None)   # недописанный ввод относился к прошлому серверу
     send(chat, "Теперь кнопки внизу — 🔑 VLESS, 🛡 AmneziaWG, 🌐 WARP, ✈️ Telegram, 📊 Сервер — работают "
                "<b>с этим сервером</b>. Сверху каждого сообщения будет 🎯 с его именем.\n\n"
                "Первый раз Комбайн там поставится сам — первая кнопка займёт минуту-две.",
@@ -1000,7 +1032,11 @@ def srv_open(chat, ip):
 
 def srv_local(chat):
     global TARGET
+    if busy.locked():
+        send(chat, "⏳ Сейчас идёт операция — дождись конца, потом переключай сервер.")
+        return
     TARGET = None
+    state.pop(chat, None)
     send(chat, "🏠 Снова работаю со своим сервером (где живёт бот).", MAIN_KB)
 
 
@@ -1575,6 +1611,13 @@ def on_callback(q):
         call("answerCallbackQuery", callback_query_id=q["id"])
     except Exception:
         pass
+    if not (data in FREE_CB or data.startswith(FREE_PREFIX)):
+        data, _, tag = data.rpartition("~")
+        if not data or tag != srv_tag():
+            where = f"{esc(TARGET['name'])} · {TARGET['ip']}" if TARGET else "этот сервер (где живёт бот)"
+            send(chat, "⚠️ Эта кнопка от другого сервера или из старого сообщения — не выполняю.\n"
+                       f"Сейчас выбран: <b>{where}</b>. Открой нужное меню заново кнопкой внизу 👇", MAIN_KB)
+            return
     if data == "cancel":
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)

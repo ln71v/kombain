@@ -706,6 +706,11 @@ aip_remove_core() {
   docker rm -f "$AIP_C_AGH" "$AIP_C_NGX" >/dev/null 2>&1
   rm -f "$AIP_CRON"
   fw_unregister aiproxy
+  # VLESS сидел за движком (nginx) на 127.0.0.1 — движка больше нет, возвращаем его на 443,
+  # иначе VPN на этом сервере умрёт вместе с нейронками.
+  if declare -F vls_go_direct >/dev/null; then
+    vls_go_direct || err "VLESS вернуть на 443 не вышло — VPN сейчас не работает. Запусти: kombain.sh cli vless go-direct"
+  fi
   if [ "${1:-0}" = "1" ]; then
     rm -rf "$AIP_DIR" "$KB_HOME/bin/cert-renew.sh"
     ok "Удалено полностью"
