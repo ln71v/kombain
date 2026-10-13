@@ -204,8 +204,13 @@ vls_go_direct() {
   [ "$(vls_port443)" = "our-nginx" ] && return 0   # движок живой — всё правильно
   [ -z "$(port_owner 443 tcp)" ] || { err "443 занят программой «$(port_owner 443 tcp)» — VLESS вернуть некуда."; return 1; }
   step "Возвращаю VLESS на 443: движка нет"
-  VLS_MODE=direct; vls_save_env
-  vls_write_conf && vls_restart || return 1
+  VLS_MODE=direct
+  if ! { vls_write_conf && vls_restart; }; then
+    VLS_MODE=behind   # не вышло — режим не меняем, следующий go-direct попробует снова
+    err "Xray не перезапустился на 443 — режим оставила прежним, повтори после исправления."
+    return 1
+  fi
+  vls_save_env
   rm -f "${KB_HOME:?}/aiproxy/nginx/sni.d/$VLS_MAP_NAME"
   ok "VLESS снова сам на 443"
 }

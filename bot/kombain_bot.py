@@ -155,8 +155,13 @@ def srv_tag(t=_NO):
     return hashlib.sha1(t["ip"].encode()).hexdigest()[:6] if t else "local"
 
 
+CB_LONG = {}   # ключ -> полная команда кнопки, если она не влезает в 64 байта Telegram
+
+
 def tag_markup(markup):
-    """Перед отправкой дописать метку текущего сервера во все кнопки под сообщением."""
+    """Перед отправкой дописать метку текущего сервера во все кнопки под сообщением.
+    Команда целиком не влезает — кладу её в CB_LONG и шлю короткий ключ «#…»: обрезать нельзя,
+    иначе длинное имя устройства превратится в другое имя."""
     if not markup or "inline_keyboard" not in markup:
         return markup
     tail = "~" + srv_tag()
@@ -165,15 +170,20 @@ def tag_markup(markup):
         new = []
         for b in row:
             d = b.get("callback_data")
-            if d is not None and not (d in FREE_CB or d.startswith(FREE_PREFIX)):
-                b = {**b, "callback_data": d[:64 - len(tail)] + tail}
+            if d is not None:
+                full = d if (d in FREE_CB or d.startswith(FREE_PREFIX)) else d + tail
+                if len(full.encode()) > 64:
+                    k = hashlib.sha1(d.encode()).hexdigest()[:12]
+                    CB_LONG[k] = d
+                    full = "#" + k + tail
+                b = {**b, "callback_data": full}
             new.append(b)
         rows.append(new)
     return {**markup, "inline_keyboard": rows}
 
 
 def btn(text, data):
-    return {"text": text, "callback_data": data[:64]}
+    return {"text": text, "callback_data": data}
 
 
 def inline(*rows):
@@ -842,6 +852,8 @@ def probe_pass(chat, text, msg_id):
     def job():
         ok, report = probe_run(host, port, password)
         rows = [[btn("🔁 Проверить ещё раз", "probe:ask")], [btn("🏠 Меню", "home")]]
+        if "изменился" in report and not ok:
+            rows.insert(0, [btn("🔑 Сервер переустановлен — забыть старый ключ", f"probe:forget:{host}:{port}")])
         if ok:
             PW_CACHE[host] = (password, port, time.time())
             rows.insert(0, [btn("💾 Оставить сервер у бота", f"srv:save:{host}")])
@@ -866,6 +878,8 @@ def probe_run(host, port, password):
     r = pw_ssh(host, port, password, "bash -s", script, 240)
     if r is None:
         return False, f"❌ <code>{host}</code>: проверка не уложилась в 4 минуты. Связь плохая или сервер висит."
+    if hostkey_changed(r):
+        return False, hostkey_text(host)
     if r.returncode == 5:
         return False, f"❌ <code>{host}</code>: неверный пароль. Скопируй его у хостера ещё раз."
     return probe_parse(host, port, r)
@@ -890,8 +904,11 @@ def pw_ssh(host, port, password, remote_cmd, stdin_text="", timeout=120):
     """Зайти по паролю (sshpass), выполнить команду. None — не уложились по времени."""
     env = {k: v for k, v in os.environ.items() if k != "BOT_TOKEN"}
     env["SSHPASS"] = password
+    os.makedirs(ADMIN_DIR, exist_ok=True)
+    # Первый вход — запоминаю ключ сервера; сменился — ssh остановится до отправки пароля.
     cmd = ["sshpass", "-e", "ssh", "-p", str(port),
-           "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+           "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
+           "-o", "LogLevel=ERROR",
            "-o", "ConnectTimeout=20", "-o", "PubkeyAuthentication=no",
            "-o", "PreferredAuthentications=password,keyboard-interactive",
            "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
@@ -919,6 +936,21 @@ REMOTE_BOOT = ("command -v curl >/dev/null || { apt-get update -qq && apt-get in
                "[ -f /opt/kombain/src/lib/common.sh ] || { curl -fsSL "
                "https://raw.githubusercontent.com/ln71v/kombain/main/kombain.sh -o /tmp/kombain-start.sh "
                "&& bash /tmp/kombain-start.sh cli secrets info >/dev/null 2>&1; }; ")
+
+
+def hostkey_changed(r):
+    return r is not None and r.returncode == 255 and "Host key verification failed" in (r.stderr or "")
+
+
+def hostkey_text(host):
+    return (f"⚠️ <b>Ключ сервера <code>{host}</code> изменился</b> с прошлого раза. Пароль НЕ отправила.\n\n"
+            "Так бывает, если сервер переустановили у хостера. Если не переустанавливали — кто-то может "
+            "подменять связь: не продолжай.")
+
+
+def forget_hostkey(host, port="22"):
+    name = host if str(port) == "22" else f"[{host}]:{port}"
+    subprocess.run(["ssh-keygen", "-R", name, "-f", KNOWN_HOSTS], capture_output=True, timeout=20)
 
 
 def srv_load():
@@ -1005,6 +1037,10 @@ def srv_save_run(chat, ip, port, password):
                    "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && "
                    f"(grep -qxF {q} ~/.ssh/authorized_keys || echo {q} >> ~/.ssh/authorized_keys) && echo KEY_OK", "", 60)
         PW_CACHE.pop(ip, None)
+        if hostkey_changed(r):
+            send(chat, hostkey_text(ip), inline([btn("🔑 Сервер переустановлен — забыть старый ключ",
+                                                     f"probe:forget:{ip}:{port}")], [btn("🏠 Меню", "home")]))
+            return
         if r is None or "KEY_OK" not in r.stdout:
             why = "неверный пароль" if r is not None and r.returncode == 5 else "не зашла"
             send(chat, f"❌ Не смогла оставить <code>{ip}</code>: {why}.",
@@ -1116,6 +1152,7 @@ def srv_del(chat, ip, sure=False):
         except subprocess.TimeoutExpired:
             gone = False
         srv_store([x for x in srv_load() if x["ip"] != ip])
+        forget_hostkey(ip, srv.get("port", "22"))
         if TARGET and TARGET["ip"] == ip:
             set_target(None)
         send(chat, ("✅ Ключ стёрла, сервер забыла." if gone else
@@ -1629,13 +1666,19 @@ def on_callback(q):
         call("answerCallbackQuery", callback_query_id=q["id"])
     except Exception:
         pass
-    if not (data in FREE_CB or data.startswith(FREE_PREFIX)):
+    if data.startswith("#") or not (data in FREE_CB or data.startswith(FREE_PREFIX)):
         data, _, tag = data.rpartition("~")
         if not data or tag != srv_tag():
-            where = f"{esc(TARGET['name'])} · {TARGET['ip']}" if TARGET else "этот сервер (где живёт бот)"
+            t = cur_target()
+            where = f"{esc(t['name'])} · {t['ip']}" if t else "этот сервер (где живёт бот)"
             send(chat, "⚠️ Эта кнопка от другого сервера или из старого сообщения — не выполняю.\n"
                        f"Сейчас выбран: <b>{where}</b>. Открой нужное меню заново кнопкой внизу 👇", MAIN_KB)
             return
+        if data.startswith("#"):
+            data = CB_LONG.get(data[1:], "")
+            if not data:
+                send(chat, "⚠️ Кнопка устарела (бот перезапускался) — открой меню заново 👇", MAIN_KB)
+                return
     if data == "cancel":
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
@@ -1652,6 +1695,11 @@ def on_callback(q):
         vls_callback(chat, data)
     elif data == "probe:ask":
         probe_ask(chat)
+    elif data.startswith("probe:forget:"):
+        host, _, port = data[len("probe:forget:"):].rpartition(":")
+        forget_hostkey(host, port or "22")
+        send(chat, f"🔑 Старый ключ <code>{esc(host)}</code> забыла. Проверь сервер заново — запомню новый.",
+             inline([btn("➕ Новый сервер — проверить", "probe:ask")]))
     elif data.startswith("srv:"):
         srv_callback(chat, data)
     elif data.startswith("upd:"):
@@ -1717,6 +1765,9 @@ def main():
                 continue
             if (src.get("from") or {}).get("id") != ADMIN:
                 continue   # чужим не отвечаем
+            # Сервер фиксируется на всю обработку: фоновая операция (например «Оставить сервер»)
+            # может сменить выбор, но уже начатое нажатие доделается там, где его проверили.
+            _tl.target = TARGET
             try:
                 if "message" in u:
                     on_message(u["message"])
@@ -1724,6 +1775,8 @@ def main():
                     on_callback(u["callback_query"])
             except Exception:
                 traceback.print_exc()
+            finally:
+                del _tl.target
 
 
 if __name__ == "__main__":

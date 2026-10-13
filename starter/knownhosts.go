@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -65,18 +66,27 @@ func (k *knownHosts) set(host, fp string) error {
 	m[host] = fp
 	k.mem[host] = fp
 	if k.path == "" {
-		return nil
+		return errNotSaved
 	}
 	if err := os.MkdirAll(filepath.Dir(k.path), 0o700); err != nil {
-		return nil // запомнили в памяти — до закрытия окна этого хватит
+		return errNotSaved
 	}
 	data, _ := json.MarshalIndent(m, "", " ")
 	tmp := k.path + ".new"
-	if os.WriteFile(tmp, data, 0o600) == nil {
-		_ = os.Rename(tmp, k.path)
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return errNotSaved
+	}
+	if err := os.Rename(tmp, k.path); err != nil {
+		_ = os.Remove(tmp)
+		return errNotSaved
 	}
 	return nil
 }
+
+// errNotSaved — в памяти запомнили (в этом окне войти можно), а в файл не записалось:
+// после перезапуска установщик спросит про этот сервер снова.
+var errNotSaved = errors.New("Сервер принят, но только до закрытия окна: не смогла записать файл с отпечатками. " +
+	"Введи пароль и жми «Войти». В следующий раз спрошу про этот сервер снова.")
 
 // hostKeyErr — ключ сервера не подтверждён: пароль не отправлен.
 type hostKeyErr struct {

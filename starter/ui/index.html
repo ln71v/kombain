@@ -460,7 +460,7 @@ $('login-form').onsubmit=async e=>{
 };
 $('hostkey-ok').onclick=async()=>{
  try{await bridge('trustHost');$('login-hostkey').hidden=true;message('login-error','Запомнила сервер. Введи пароль ещё раз и жми «Войти».');$('password').focus();}
- catch(err){message('login-error',errorText(err));}
+ catch(err){$('login-hostkey').hidden=true;message('login-error',errorText(err));$('password').focus();}
 };
 $('token-form').onsubmit=async e=>{
  e.preventDefault();if(localBusy)return;localBusy=true;message('token-error','');$('token-submit').disabled=true;

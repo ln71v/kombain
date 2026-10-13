@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -371,5 +372,28 @@ func TestHostKeyPinning(t *testing.T) {
 	case p := <-seen2:
 		t.Fatalf("пароль ушёл на подменённый сервер: %q", p)
 	default:
+	}
+}
+
+// Файл с отпечатками не записался — человек узнаёт об этом, в этом окне войти всё равно можно.
+func TestKnownHostsWriteFailure(t *testing.T) {
+	dir := t.TempDir()
+	blocker := dir + "/file"
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	k := newKnownHosts(blocker + "/sub/kh.json") // каталог внутри файла создать нельзя
+	if err := k.set("1.2.3.4:22", "SHA256:abc"); err == nil {
+		t.Fatal("ошибка записи проглочена")
+	}
+	if k.get("1.2.3.4:22") != "SHA256:abc" {
+		t.Fatal("в памяти должно остаться")
+	}
+	ok := newKnownHosts(dir + "/kh.json")
+	if err := ok.set("1.2.3.4:22", "SHA256:abc"); err != nil {
+		t.Fatal(err)
+	}
+	if newKnownHosts(dir+"/kh.json").get("1.2.3.4:22") != "SHA256:abc" {
+		t.Fatal("не сохранилось между запусками")
 	}
 }
