@@ -107,15 +107,19 @@ tgu_backup() {
   echo "$f"
 }
 
-# Достать из архива раздел [access.users] (люди и их ключи).
-tgu_saved_users() {
+# Достать из архива все разделы [access.*]: люди, ключи, кто выключен ([access.user_enabled]) и прочее.
+tgu_saved_access() {
   [ -s "$1" ] || return 0
   tar -xzOf "$1" --wildcards '*/config.toml' 2>/dev/null \
-    | awk '/^\[access\.users\]/{on=1; next} /^\[/{on=0} on && NF'
+    | awk '/^\[/{on=($0 ~ /^\[access[.\]]/)} on && NF'
 }
 
+# Метка «переустановка не закончена»: архив и порт. Пока она есть, следующая установка
+# вернёт людей из этого архива, даже если прошлая попытка упала на середине.
+TGU_PENDING="$KB_BACKUP/telemt-restore-pending"
+
 tgu_install_core() {
-  local saved="" users="" _t old_port=""
+  local saved="" access="" _t old_port=""
   if tgu_installed; then
     tgu_load_env; old_port="${TGU_PORT:-}"
     tgu_api_up && { warn "Уже установлено и работает."; return 0; }
@@ -123,10 +127,16 @@ tgu_install_core() {
     systemctl restart kombain-telemt >/dev/null 2>&1
     for _t in $(seq 1 15); do tgu_api_up && { ok "Поднялся после перезапуска, люди на месте."; return 0; }; sleep 1; done
     saved=$(tgu_backup) || { err "Не смогла сохранить людей и ключи — переустановку отменяю, ничего не трогала."; return 1; }
-    users=$(tgu_saved_users "$saved")
+    if [ -n "$saved" ]; then
+      printf '%s\n%s\n' "$saved" "$old_port" >"$TGU_PENDING" && chmod 600 "$TGU_PENDING"
+    fi
     warn "Не поднялся — переставляю. Люди и ключи сохранены: $saved"
     tgu_remove_core --no-backup >/dev/null
+  elif [ -s "$TGU_PENDING" ]; then
+    saved=$(sed -n 1p "$TGU_PENDING"); old_port=$(sed -n 2p "$TGU_PENDING")
+    [ -s "$saved" ] && warn "Прошлая переустановка не закончилась — возвращаю людей из $saved" || saved=""
   fi
+  access=$(tgu_saved_access "$saved")
   ensure_pkgs curl jq tar qrencode || return 1
   local port="${KB_TGU_PORT:-${old_port:-9443}}" ip   # переустановка — на прежний порт, чтобы ссылки не сменились
   if [ -n "$(port_owner "$port" tcp)" ]; then
@@ -177,13 +187,12 @@ mask = true
 tls_emulation = true
 tls_front_dir = "tlsfront"
 
-[access.users]
 EOF
-  if [ -n "$users" ]; then
-    printf '%s\n' "$users" >>"$TGU_CONF"
-    ok "Вернула людей из бэкапа: $(grep -c . <<<"$users") — ссылки прежние, если порт не сменился."
+  if grep -q '^\[access\.users\]' <<<"$access"; then
+    printf '%s\n' "$access" >>"$TGU_CONF"
+    ok "Вернула людей из бэкапа вместе с выключенными — ссылки прежние, если порт не сменился."
   else
-    printf 'admin = "%s"\n' "$(openssl rand -hex 16)" >>"$TGU_CONF"
+    printf '[access.users]\nadmin = "%s"\n' "$(openssl rand -hex 16)" >>"$TGU_CONF"
   fi
   chown "$TGU_USER:$TGU_USER" "$TGU_CONF"; chmod 640 "$TGU_CONF"
   mkdir -p "$(dirname "$TGU_ENV")"
@@ -195,6 +204,7 @@ EOF
   for _ in $(seq 1 20); do tgu_api GET /users >/dev/null 2>&1 && { up=1; break; }; sleep 1; done
   [ "$up" = 1 ] || { err "telemt не запустился. Логи: journalctl -u kombain-telemt -n 30"; return 1; }
 
+  rm -f "$TGU_PENDING"
   fw_register tgusers "$port/tcp"
   if grep -q '^Status: active' <<<"$(ufw status 2>/dev/null)"; then fw_apply; fi
   ok "Telegram-прокси по именам работает на порту $port. Первый ключ — admin (твой)."

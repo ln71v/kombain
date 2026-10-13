@@ -272,7 +272,19 @@ EOF
 aip_start_adguard() {
   step "Запускаю AdGuard Home"
   docker rm -f "$AIP_C_AGH" >/dev/null 2>&1
-  rm -rf "$AIP_AGH"   # установка всегда с чистого AdGuard
+  # Установка всегда с чистого AdGuard. Старый (после «удалить, данные оставить») — сначала в бэкап,
+  # список устройств из него вернём после настройки.
+  AIP_OLD_CLIENTS=""
+  if [ -d "$AIP_AGH" ] && [ -n "$(ls -A "$AIP_AGH" 2>/dev/null)" ]; then
+    local f; f="$KB_BACKUP/adguard-$(date +%Y%m%d-%H%M%S).tar.gz"
+    mkdir -p "$KB_BACKUP" && chmod 700 "$KB_BACKUP"
+    tar -czf "$f" -C "$(dirname "$AIP_AGH")" "$(basename "$AIP_AGH")" 2>/dev/null && chmod 600 "$f" \
+      || { err "Не смогла сохранить старый AdGuard в бэкап — установку останавливаю, ничего не стёрла."; return 1; }
+    ok "Старый AdGuard сохранён: $f"
+    AIP_OLD_CLIENTS=$(awk '/^ *allowed_clients:/{f=1; next} f && /^ *- /{sub(/^ *- */, ""); gsub(/["\047]/, ""); print; next} f{f=0}' \
+      "$AIP_AGH/conf/AdGuardHome.yaml" 2>/dev/null | grep -E '^[a-z0-9][a-z0-9-]{0,62}$' | tr '\n' ' ')
+  fi
+  rm -rf "$AIP_AGH"
   mkdir -p "$AIP_AGH/work" "$AIP_AGH/conf"
   docker run -d --name "$AIP_C_AGH" --restart unless-stopped --network host \
     -v "$AIP_AGH/work:/opt/adguardhome/work" \
@@ -339,7 +351,8 @@ aip_configure_adguard() {
 
   aip_tune_dns
 
-  aip_set_clients "$FIRST_CLIENT" || return 1
+  # shellcheck disable=SC2086  # список имён через пробел
+  aip_set_clients "$FIRST_CLIENT" ${AIP_OLD_CLIENTS:-} || return 1
   aip_sync_rewrites
 }
 
