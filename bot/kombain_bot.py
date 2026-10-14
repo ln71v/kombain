@@ -389,7 +389,9 @@ def safe_put(chat, what, text, msg_id):
         send(chat, "🔐 Сообщение удалено" + (", ключ проверен и лежит в сейфе." if code == 0 else "."))
     elif what == "domain":
         code, out = kb("secrets", "set-domain", t, timeout=30)
-        records_ok.clear()
+        here = rec_key("")[1]
+        for k in [k for k in records_ok if k[1] == here]:
+            records_ok.pop(k, None)
     else:
         code, out = kb("secrets", "set-client", t, timeout=30)
     if code != 0:
@@ -1013,6 +1015,11 @@ def ensure_key():
         os.makedirs(ADMIN_DIR, exist_ok=True)
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "kombain-admin",
                         "-f", ADMIN_KEY], capture_output=True, timeout=60)
+    if not os.path.exists(ADMIN_KEY + ".pub"):   # .pub потерялся (бэкап, руками) — достаю из приватного
+        r = subprocess.run(["ssh-keygen", "-y", "-f", ADMIN_KEY], capture_output=True, text=True, timeout=30)
+        if r.returncode == 0 and r.stdout.strip():
+            with open(ADMIN_KEY + ".pub", "w") as f:
+                f.write(r.stdout.strip() + " kombain-admin\n")
     with open(ADMIN_KEY + ".pub") as f:
         return f.read().strip()
 

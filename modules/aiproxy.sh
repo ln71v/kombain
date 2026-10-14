@@ -620,6 +620,8 @@ aip_install_core() {
 
   # хвосты прошлой неудачной попытки — наши же контейнеры, мешают проверке портов
   docker rm -f "$AIP_C_AGH" "$AIP_C_NGX" >/dev/null 2>&1
+  local _w   # nginx от прошлой попытки мог ещё не отпустить порты
+  for _w in 1 2 3 4 5 6 7 8 9 10; do [ "$(port_owner 443 tcp)" = "nginx" ] || break; sleep 0.5; done
 
   # Сначала проверяем всё, кроме 443: если что-то занято — уходим, ничего не тронув
   step "Проверяю порты"
@@ -734,9 +736,7 @@ aip_remove_core() {
   fw_unregister aiproxy
   # VLESS сидел за движком (nginx) на 127.0.0.1 — движка больше нет, возвращаем его на 443,
   # иначе VPN на этом сервере умрёт вместе с нейронками.
-  local _w
-  for _w in 1 2 3 4 5 6 7 8 9 10; do [ "$(port_owner 443 tcp)" = "nginx" ] || break; sleep 0.5; done
-  if declare -F vls_go_direct >/dev/null; then
+  if declare -F vls_go_direct >/dev/null; then   # сама подождёт, пока nginx отпустит 443
     vls_go_direct || err "VLESS вернуть на 443 не вышло — VPN сейчас не работает. Запусти: kombain.sh cli vless go-direct"
   fi
   if [ "${1:-0}" = "1" ]; then
