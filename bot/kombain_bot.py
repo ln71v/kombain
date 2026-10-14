@@ -271,12 +271,18 @@ def run_long(chat, title, func):
 
 
 # ───────────────────────── Сейф: место сбора ─────────────────────────
+def rec_key(domain):
+    """Записи проверены для домена НА ЭТОМ сервере — у другого сервера свой адрес."""
+    t = cur_target()
+    return (domain, t["ip"] if t else "local")
+
+
 def check_records(domain, ip):
-    if records_ok.get(domain):
+    if records_ok.get(rec_key(domain)):
         return True, ""
     code, out = kb("aiproxy", "check-dns", domain, ip, timeout=60)
     if code == 0:
-        records_ok[domain] = True
+        records_ok[rec_key(domain)] = True
     return code == 0, out
 
 
@@ -290,7 +296,7 @@ def make_records(chat, force=False):
     code, out = kb("aiproxy", "make-dns", *(["--force"] if force else []),
                    env={"KB_SERVER_IP": ip}, timeout=90)
     if code == 0:
-        records_ok[domain] = True
+        records_ok[rec_key(domain)] = True
         send_pre(chat, out, "🌐 Записи в Cloudflare сделала сама:")
         return True
     if code == 3:
@@ -308,7 +314,7 @@ def safe_screen(chat):
     state.pop(chat, None)
     safe, info = sec_info(), aip_info()
     domain = safe.get("domain")
-    rec = bool(records_ok.get(domain)) if domain else False
+    rec = bool(records_ok.get(rec_key(domain))) if domain else False
     has_key, client = bool(safe.get("cloudflare")), safe.get("client")
     mark = lambda ok: "✅" if ok else "⬜"
 
@@ -419,7 +425,7 @@ def safe_go(chat):
     if not (safe.get("domain") and safe.get("cloudflare") and safe.get("client")):
         safe_screen(chat)
         return
-    if not records_ok.get(safe["domain"]) and not make_records(chat):
+    if not records_ok.get(rec_key(safe["domain"])) and not make_records(chat):
         return
 
     def job():
@@ -994,7 +1000,10 @@ def remote_kb(srv, args, env, timeout, text=True):
     if not text:
         return r.returncode, r.stdout
     out = (r.stdout + r.stderr).strip()
-    if r.returncode == 255 and not r.stdout:
+    if r.returncode == 255 and "Host key verification failed" in (r.stderr or ""):
+        out = (f"Ключ сервера {srv['ip']} изменился — команду не отправила. Переустанавливал сервер? "
+               "«🗂 Мои серверы» → сервер → «🔍 Проверить снова» — там кнопка, что делать дальше.")
+    elif r.returncode == 255 and not r.stdout:
         out = f"Не достучалась до {srv['ip']} по ключу: {out[-200:]}"
     return r.returncode, out
 
@@ -1009,11 +1018,12 @@ def ensure_key():
 
 
 def srv_save_ask(chat, ip):
-    if srv_get(ip):
+    pw = PW_CACHE.get(ip)
+    fresh = bool(pw and time.time() - pw[2] < PW_TTL)
+    if srv_get(ip) and not fresh:
         srv_open(chat, ip)
         return
-    pw = PW_CACHE.get(ip)
-    if pw and time.time() - pw[2] < PW_TTL:
+    if fresh:   # и для уже сохранённого: после переустановки сервера ключ бота надо положить заново
         srv_save_run(chat, ip, pw[1], pw[0])
         return
     PW_CACHE.pop(ip, None)
@@ -1057,8 +1067,9 @@ def srv_save_run(chat, ip, port, password):
         lst = [x for x in srv_load() if x["ip"] != ip] + [srv]
         srv_store(lst)
         send(chat, f"💾 Оставила: <b>{esc(name)}</b> · <code>{ip}</code>.\n"
-                   "Дальше хожу туда по своему ключу — пароль больше не нужен и нигде не лежит.")
-        srv_open(chat, ip)
+                   "Дальше хожу туда по своему ключу — пароль больше не нужен и нигде не лежит.\n\n"
+                   "Кнопки внизу пока работают с прежним сервером. Переключиться — кнопкой ниже.",
+             inline([btn("🎯 Работать с ним", f"srv:open:{ip}")], [btn("🗂 Мои серверы", "srv:list")]))
     run_long(chat, f"Кладу свой ключ на {ip}…", job)
 
 
@@ -1109,6 +1120,12 @@ def srv_probe(chat, ip):
         except subprocess.TimeoutExpired:
             send(chat, "❌ Проверка не уложилась в 4 минуты.",
                  inline([btn("🔁 Ещё раз", f"srv:probe:{ip}"), btn("🗂 Мои серверы", "srv:list")]))
+            return
+        if hostkey_changed(r):
+            send(chat, hostkey_text(ip) + "\n\nЕсли переустанавливал: забудь старый ключ, потом "
+                       "«➕ Новый сервер — проверить» с паролем и «💾 Оставить» — положу свой ключ заново.",
+                 inline([btn("🔑 Сервер переустановлен — забыть старый ключ",
+                             f"probe:forget:{ip}:{srv.get('port', '22')}")], [btn("🗂 Мои серверы", "srv:list")]))
             return
         send(chat, probe_parse(ip, srv["port"], r)[1],
              inline([btn("◀️ К серверу", f"srv:open:{ip}"), btn("🗂 Мои серверы", "srv:list")],

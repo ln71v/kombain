@@ -18,6 +18,7 @@ AIP_API="http://127.0.0.1:3000/control"
 AIP_DOMAINS_FILE="$KB_SRC/data/ai-domains.txt"
 AIP_C_AGH="kombain-adguard"
 AIP_C_NGX="kombain-nginx"
+AIP_PENDING="$KB_BACKUP/adguard-clients-pending"   # устройства, которые надо вернуть после переустановки
 AIP_CRON="/etc/cron.d/kombain-cert"
 
 aip_load_env() {
@@ -274,15 +275,26 @@ aip_start_adguard() {
   docker rm -f "$AIP_C_AGH" >/dev/null 2>&1
   # Установка всегда с чистого AdGuard. Старый (после «удалить, данные оставить») — сначала в бэкап,
   # список устройств из него вернём после настройки.
-  AIP_OLD_CLIENTS=""
-  if [ -d "$AIP_AGH" ] && [ -n "$(ls -A "$AIP_AGH" 2>/dev/null)" ]; then
+  # Список устройств живёт в метке AIP_PENDING, пока установка не закончится удачно:
+  # упадёт на середине — следующая попытка возьмёт устройства из метки, а не из уже пустого каталога.
+  mkdir -p "$KB_BACKUP" && chmod 700 "$KB_BACKUP"
+  AIP_OLD_CLIENTS=$(cat "$AIP_PENDING" 2>/dev/null)
+  if [ -s "$AIP_AGH/conf/AdGuardHome.yaml" ]; then
     local f; f="$KB_BACKUP/adguard-$(date +%Y%m%d-%H%M%S).tar.gz"
-    mkdir -p "$KB_BACKUP" && chmod 700 "$KB_BACKUP"
     tar -czf "$f" -C "$(dirname "$AIP_AGH")" "$(basename "$AIP_AGH")" 2>/dev/null && chmod 600 "$f" \
       || { err "Не смогла сохранить старый AdGuard в бэкап — установку останавливаю, ничего не стёрла."; return 1; }
     ok "Старый AdGuard сохранён: $f"
-    AIP_OLD_CLIENTS=$(awk '/^ *allowed_clients:/{f=1; next} f && /^ *- /{sub(/^ *- */, ""); gsub(/["\047]/, ""); print; next} f{f=0}' \
-      "$AIP_AGH/conf/AdGuardHome.yaml" 2>/dev/null | grep -E '^[a-z0-9][a-z0-9-]{0,62}$' | tr '\n' ' ')
+    # allowed_clients: строки «- имя»; пустые строки и комментарии внутри списка пропускаем
+    AIP_OLD_CLIENTS="$AIP_OLD_CLIENTS $(awk '
+      /^ *allowed_clients:/{f=1; next}
+      f && /^ *(#.*)?$/{next}
+      f && /^ *- /{sub(/^ *- */, ""); sub(/ *#.*/, ""); gsub(/["\047]/, ""); print; next}
+      f{f=0}' "$AIP_AGH/conf/AdGuardHome.yaml" 2>/dev/null)"
+  fi
+  AIP_OLD_CLIENTS=$(tr ' ' '\n' <<<"$AIP_OLD_CLIENTS" | grep -E '^[a-z0-9][a-z0-9-]{0,62}$' | sort -u | tr '\n' ' ')
+  if [ -n "${AIP_OLD_CLIENTS// /}" ]; then
+    printf '%s\n' "$AIP_OLD_CLIENTS" >"$AIP_PENDING" && chmod 600 "$AIP_PENDING" \
+      || { err "Не смогла записать список устройств — установку останавливаю, ничего не стёрла."; return 1; }
   fi
   rm -rf "$AIP_AGH"
   mkdir -p "$AIP_AGH/work" "$AIP_AGH/conf"
@@ -353,6 +365,7 @@ aip_configure_adguard() {
 
   # shellcheck disable=SC2086  # список имён через пробел
   aip_set_clients "$FIRST_CLIENT" ${AIP_OLD_CLIENTS:-} || return 1
+  rm -f "$AIP_PENDING"   # устройства вернулись — метка больше не нужна
   aip_sync_rewrites
 }
 
@@ -721,6 +734,8 @@ aip_remove_core() {
   fw_unregister aiproxy
   # VLESS сидел за движком (nginx) на 127.0.0.1 — движка больше нет, возвращаем его на 443,
   # иначе VPN на этом сервере умрёт вместе с нейронками.
+  local _w
+  for _w in 1 2 3 4 5 6 7 8 9 10; do [ "$(port_owner 443 tcp)" = "nginx" ] || break; sleep 0.5; done
   if declare -F vls_go_direct >/dev/null; then
     vls_go_direct || err "VLESS вернуть на 443 не вышло — VPN сейчас не работает. Запусти: kombain.sh cli vless go-direct"
   fi
