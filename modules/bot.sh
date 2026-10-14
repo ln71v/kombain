@@ -74,11 +74,15 @@ bot_install_core() {
   mkdir -p "$BOT_DIR"
   # Бота ставили раньше и удаляли — вернуть его ключ и «Мои серверы»
   if [ ! -f "$BOT_DIR/admin_key" ]; then
-    local last; last=$(ls -1t "$KB_BACKUP"/bot-admin-*.tar.gz 2>/dev/null | head -1)
-    if [ -n "$last" ] && tar -xzf "$last" -C "$BOT_DIR" 2>/dev/null; then
-      chmod 600 "$BOT_DIR"/admin_key "$BOT_DIR"/servers.json "$BOT_DIR"/known_hosts 2>/dev/null
-      ok "Вернула ключ бота и список серверов из $last"
-    fi
+    local last
+    for last in $(ls -1t "$KB_BACKUP"/bot-admin-*.tar.gz 2>/dev/null); do
+      tar -tzf "$last" 2>/dev/null | grep -qx admin_key || continue   # битый или без ключа — следующий
+      if tar -xzf "$last" -C "$BOT_DIR" 2>/dev/null; then
+        chmod 600 "$BOT_DIR"/admin_key "$BOT_DIR"/servers.json "$BOT_DIR"/known_hosts 2>/dev/null
+        ok "Вернула ключ бота и список серверов из $last"
+        break
+      fi
+    done
   fi
   ( umask 077; printf 'BOT_TOKEN=%s\nADMIN_ID=%s\nCLAIM_CODE=%s\nKB_SRC=%s\n' \
       "$token" "$id" "$code" "$KB_SRC" >"$BOT_ENV" )
@@ -155,10 +159,16 @@ bot_remove() {
   systemctl daemon-reload
   # ключ, которым бот ходит на «Мои серверы», и сам список — в бэкап, установка вернёт
   if [ -f "$BOT_DIR/admin_key" ]; then
-    local f; f="$KB_BACKUP/bot-admin-$(date +%Y%m%d-%H%M%S).tar.gz"
+    local f files=() x; f="$KB_BACKUP/bot-admin-$(date +%Y%m%d-%H%M%S).tar.gz"
+    for x in admin_key admin_key.pub servers.json known_hosts; do [ -f "$BOT_DIR/$x" ] && files+=("$x"); done
     mkdir -p "$KB_BACKUP" && chmod 700 "$KB_BACKUP"
-    (cd "$BOT_DIR" && tar -czf "$f" admin_key admin_key.pub servers.json known_hosts 2>/dev/null) ; chmod 600 "$f" 2>/dev/null
-    [ -s "$f" ] && ok "Ключ бота и список серверов сохранены: $f"
+    if (cd "$BOT_DIR" && tar -czf "$f" "${files[@]}") && tar -tzf "$f" 2>/dev/null | grep -qx admin_key; then
+      chmod 600 "$f"; ok "Ключ бота и список серверов сохранены: $f"
+    else
+      rm -f "$f"
+      err "Не смогла сохранить ключ бота — папку $BOT_DIR оставила. Служба бота уже выключена."
+      return 1
+    fi
   fi
   rm -rf "$BOT_DIR"
   ok "Бот удалён. Самого бота в Telegram можно удалить у @BotFather: /deletebot"

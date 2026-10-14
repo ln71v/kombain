@@ -111,7 +111,22 @@ tgu_backup() {
 tgu_saved_access() {
   [ -s "$1" ] || return 0
   tar -xzOf "$1" --wildcards '*/config.toml' 2>/dev/null \
-    | awk '/^\[/{on=($0 ~ /^\[access[.\]]/)} on && NF'
+    | awk '/^\[/{on=($0 ~ /^\[\[?access[.\]]/)} on && NF'
+}
+
+# Порт из конфига в архиве (чтобы старые ссылки остались рабочими)
+tgu_saved_port() {
+  [ -s "$1" ] || return 0
+  tar -xzOf "$1" --wildcards '*/config.toml' 2>/dev/null \
+    | awk '/^\[/{s=($0=="[server]")} s && /^port *=/{gsub(/[^0-9]/,""); print; exit}'
+}
+
+# Самый свежий бэкап, в котором реально есть люди ([access.users]). Пусто — нет такого.
+tgu_latest_backup() {
+  local f
+  for f in $(ls -1t "$KB_BACKUP"/telemt-*.tar.gz 2>/dev/null); do
+    grep -q '^\[access\.users\]' <<<"$(tgu_saved_access "$f")" && { echo "$f"; return 0; }
+  done
 }
 
 # Метка «переустановка не закончена»: архив и порт. Пока она есть, следующая установка
@@ -137,6 +152,15 @@ tgu_install_core() {
     [ -s "$saved" ] && warn "Прошлая переустановка не закончилась — возвращаю людей из $saved" || saved=""
   fi
   access=$(tgu_saved_access "$saved")
+  # Людей в нём нет (конфиг был битый) или ставим после «Убрать целиком» — беру последний годный бэкап
+  if ! grep -q '^\[access\.users\]' <<<"$access"; then
+    local last; last=$(tgu_latest_backup)
+    if [ -n "$last" ]; then
+      saved="$last"; access=$(tgu_saved_access "$last")
+      [ -n "$old_port" ] || old_port=$(tgu_saved_port "$last")
+      warn "Нашла бэкап людей и ключей: $last — возвращаю. Начать с чистого листа: удали этот файл и поставь снова."
+    fi
+  fi
   ensure_pkgs curl jq tar qrencode || return 1
   local port="${KB_TGU_PORT:-${old_port:-9443}}" ip   # переустановка — на прежний порт, чтобы ссылки не сменились
   if [ -n "$(port_owner "$port" tcp)" ]; then
