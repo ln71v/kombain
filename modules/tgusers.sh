@@ -306,7 +306,11 @@ tgu_cli() {
       # Для установщика (exe): поставить и выдать ссылку admin в том же виде, что tgproxy link
       ensure_pkgs jq qrencode >/dev/null 2>&1
       tgu_install_core >&2 || return 1
-      local tg; tg=$(tgu_link admin) && [ -n "$tg" ] || { err "Нет ссылки admin"; return 1; }
+      local tg; tg=$(tgu_link admin 2>/dev/null)
+      if [ -z "$tg" ]; then   # из бэкапа вернулись люди без admin — заводим admin заново
+        tgu_add admin >&2 && tg=$(tgu_link admin)
+      fi
+      [ -n "$tg" ] || { err "Нет ссылки admin"; return 1; }
       jq -nc --arg tg "$tg" --arg web "https://t.me/proxy?${tg#*\?}" \
         --arg qr "$(qrencode -t SVG -m 2 -o - "$tg" 2>/dev/null | base64 -w0)" '{tg:$tg, web:$web, qr:$qr}' ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
