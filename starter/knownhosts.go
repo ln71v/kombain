@@ -21,6 +21,9 @@ func newKnownHosts(path string) *knownHosts {
 	return &knownHosts{path: path, mem: map[string]string{}}
 }
 
+// knownHostsPath — где лежит файл с отпечатками. Android подменяет его на папку приложения (SetDataDir).
+var knownHostsPath = defaultKnownHostsPath
+
 // defaultKnownHostsPath — %AppData%\Kombain\known_hosts.json на Windows.
 func defaultKnownHostsPath() string {
 	dir, err := os.UserConfigDir()
