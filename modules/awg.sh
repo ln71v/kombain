@@ -44,17 +44,91 @@ awg_wan_if() { ip -4 route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) i
 
 # ───────────────────────── установка ─────────────────────────
 
+# Репозиторий Amnezia (ppa:amnezia/ppa) подключаем сами, без add-apt-repository.
+# add-apt-repository узнаёт ключ через api.launchpad.net, а он с части хостингов не отвечает
+# (Германия 103.73.35.35, 20.10.2026: таймаут, при этом сам репозиторий доступен).
+# Ключ берём с keyserver.ubuntu.com и пускаем, только если отпечаток совпал с зашитым.
+AWG_PPA_URL="https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu"
+AWG_PPA_FPR="75C9DD72C799870E310542E24166F2C257290828"   # ключ подписи PPA, uid «Launchpad PPA for Iurii Egorov»
+AWG_PPA_KEY="/etc/apt/keyrings/kombain-amnezia.gpg"
+AWG_PPA_LIST="/etc/apt/sources.list.d/kombain-amnezia.list"
+
+# Ключ в виде текста с сервера ключей Ubuntu. По http тоже можно: подлинность проверяет отпечаток.
+awg_fetch_key() {
+  local u
+  for u in "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x$AWG_PPA_FPR" \
+           "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x$AWG_PPA_FPR"; do
+    curl -fsS --max-time 20 "$u" 2>/dev/null && return 0
+  done
+  return 1
+}
+
+# В файле ровно один ключ, и это ключ Amnezia
+awg_key_ok() {
+  local out
+  out=$(gpg --show-keys --with-colons "$1" 2>/dev/null) || return 1
+  [ "$(awk -F: '$1=="pub"' <<<"$out" | wc -l)" = 1 ] || return 1
+  [ "$(awk -F: '$1=="fpr"{print $10; exit}' <<<"$out")" = "$AWG_PPA_FPR" ]
+}
+
+# Что apt говорит про репозиторий Amnezia; пусто — всё хорошо. Заодно обновляет списки пакетов.
+awg_repo_errors() {
+  apt-get update 2>&1 | grep -i 'amnezia' | grep -E 'Err:|NO_PUBKEY|not signed|404' || true
+}
+
+awg_add_repo() {
+  local c tmp e got=0
+  if grep -rqs 'amnezia/ppa' /etc/apt/sources.list /etc/apt/sources.list.d/; then
+    e=$(awg_repo_errors)
+    [ -z "$e" ] && return 0
+    if ! grep -qs 'amnezia/ppa' "$AWG_PPA_LIST"; then
+      err "Репозиторий Amnezia уже прописан (не Комбайном), но apt на него ругается:"
+      printf '%s\n' "$e" | head -3
+      say "Посмотри файлы с amnezia в имени в /etc/apt/sources.list.d — Комбайн чужие не трогает."
+      return 1
+    fi
+    warn "Репозиторий Amnezia прописан, но apt на него ругается — подключаю заново."
+  fi
+
+  c=$( . /etc/os-release 2>/dev/null; echo "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}" )
+  [ -n "$c" ] || { err "Не поняла, какая версия Ubuntu (нет VERSION_CODENAME в /etc/os-release)."; return 1; }
+
+  tmp=$(mktemp -d)
+  if awg_fetch_key >"$tmp/key.asc" && awg_key_ok "$tmp/key.asc"; then
+    mkdir -p /etc/apt/keyrings
+    gpg --dearmor --yes -o "$AWG_PPA_KEY" "$tmp/key.asc" && chmod 644 "$AWG_PPA_KEY" \
+      && printf 'deb [signed-by=%s] %s %s main\n' "$AWG_PPA_KEY" "$AWG_PPA_URL" "$c" >"$AWG_PPA_LIST" \
+      && got=1
+  fi
+  rm -rf "$tmp"
+
+  if [ "$got" != 1 ]; then
+    warn "Сервер ключей Ubuntu не ответил или выдал не тот ключ — пробую обычный способ (add-apt-repository)."
+    ensure_pkgs software-properties-common python3-launchpadlib || return 1
+    # без timeout при недоступном api.launchpad.net висит пару минут, а бот всё это время молчит
+    timeout 120 add-apt-repository -y ppa:amnezia/ppa >/dev/null 2>&1 || {
+      err "Не подключился репозиторий Amnezia: с сервера не отвечают ни keyserver.ubuntu.com, ни api.launchpad.net."
+      return 1
+    }
+  fi
+
+  e=$(awg_repo_errors)
+  if [ -n "$e" ]; then
+    err "Репозиторий Amnezia подключён, но apt на него ругается:"
+    printf '%s\n' "$e" | head -3
+    return 1
+  fi
+  ok "Репозиторий Amnezia подключён"
+}
+
 awg_get_pkgs() {
   if awg_version_ok; then ok "AmneziaWG уже есть: $(awg_versions)"; return 0; fi
   step "Ставлю AmneziaWG 3.1 из репозитория Amnezia"
-  ensure_pkgs software-properties-common python3-launchpadlib gnupg2 qrencode iptables || return 1
+  ensure_pkgs gnupg2 qrencode iptables || return 1
   if ! dpkg -s "linux-headers-$(uname -r)" >/dev/null 2>&1; then
     ensure_pkgs "linux-headers-$(uname -r)" || { err "Нет заголовков ядра $(uname -r). Обнови систему и перезагрузись."; return 1; }
   fi
-  if ! grep -rqs 'amnezia/ppa' /etc/apt/sources.list /etc/apt/sources.list.d/; then
-    add-apt-repository -y ppa:amnezia/ppa >/dev/null 2>&1 || { err "Не подключился репозиторий Amnezia."; return 1; }
-  fi
-  apt-get update -qq
+  awg_add_repo || return 1
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq amneziawg >/dev/null 2>&1 \
     || { err "Пакет amneziawg не встал. Подробности: apt-get install amneziawg"; return 1; }
   modprobe amneziawg 2>/dev/null
