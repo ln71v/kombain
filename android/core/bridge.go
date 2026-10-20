@@ -6,6 +6,7 @@ package kbcore
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"sync"
 )
 
@@ -51,6 +52,8 @@ func Call(name, args string) string {
 		res = a.needLogin()
 	case "proxyLink":
 		res, err = a.proxyLink()
+	case "trustHost":
+		err = a.trustHost()
 	default:
 		err = errors.New("Неизвестная команда.")
 	}
@@ -60,6 +63,19 @@ func Call(name, args string) string {
 	}
 	out, _ := json.Marshal(r)
 	return string(out)
+}
+
+// SetDataDir — папка приложения на телефоне. Там хранится файл с отпечатками серверов,
+// чтобы при повторном входе сверять ключ сервера (как у exe в %AppData%). Звать до первого входа.
+func SetDataDir(dir string) {
+	if dir == "" {
+		return
+	}
+	p := filepath.Join(dir, "known_hosts.json")
+	instMu.Lock()
+	knownHostsPath = func() string { return p }
+	inst.known = newKnownHosts(p)
+	instMu.Unlock()
 }
 
 // Close рвёт соединение с сервером и начинает с чистого листа (приложение закрыли).

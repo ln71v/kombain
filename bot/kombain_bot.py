@@ -11,9 +11,13 @@
      Сейф переживает что угодно: можно закрыть чат и вернуться завтра.
   2. Одна кнопка «Устанавливай» — и ждёшь.
 """
+import hashlib
+import ipaddress
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -73,9 +77,12 @@ def esc(t):
 
 
 def send(chat, text, markup=None):
+    t = cur_target()
+    if t:
+        text = f"🎯 <b>{esc(t['name'])}</b> · {t['ip']}\n" + text
     p = {"chat_id": chat, "text": text[:4000], "parse_mode": "HTML", "disable_web_page_preview": True}
     if markup:
-        p["reply_markup"] = markup
+        p["reply_markup"] = tag_markup(markup)
     try:
         return call("sendMessage", **p)
     except urllib.error.HTTPError:
@@ -118,8 +125,65 @@ def last_line(out, default=""):
     return line.lstrip("✔✖! ").strip()
 
 
+# Кнопки под сообщением помнят, для какого сервера их нарисовали: в конце «~метка».
+# Нажал старую кнопку после переключения сервера — не выполняю (иначе удалит не там).
+FREE_CB = ("cancel", "home")
+FREE_PREFIX = ("srv:", "probe:")   # в них IP сервера и так прописан явно
+
+
+# Долгая операция запоминает свой сервер при старте: переключишь сервер посреди неё —
+# она доделает своё там, где начала, и кнопки в её ответах будут помечены её сервером.
+_tl = threading.local()
+_NO = object()
+
+
+def cur_target():
+    t = getattr(_tl, "target", _NO)
+    return TARGET if t is _NO else t
+
+
+def set_target(t):
+    """Сменить выбранный сервер (и для операции, которая сейчас идёт в этом потоке)."""
+    global TARGET
+    TARGET = t
+    if getattr(_tl, "target", _NO) is not _NO:
+        _tl.target = t
+
+
+def srv_tag(t=_NO):
+    t = cur_target() if t is _NO else t
+    return hashlib.sha1(t["ip"].encode()).hexdigest()[:6] if t else "local"
+
+
+CB_LONG = {}   # ключ -> полная команда кнопки, если она не влезает в 64 байта Telegram
+
+
+def tag_markup(markup):
+    """Перед отправкой дописать метку текущего сервера во все кнопки под сообщением.
+    Команда целиком не влезает — кладу её в CB_LONG и шлю короткий ключ «#…»: обрезать нельзя,
+    иначе длинное имя устройства превратится в другое имя."""
+    if not markup or "inline_keyboard" not in markup:
+        return markup
+    tail = "~" + srv_tag()
+    rows = []
+    for row in markup["inline_keyboard"]:
+        new = []
+        for b in row:
+            d = b.get("callback_data")
+            if d is not None:
+                full = d if (d in FREE_CB or d.startswith(FREE_PREFIX)) else d + tail
+                if len(full.encode()) > 64:
+                    k = hashlib.sha1(d.encode()).hexdigest()[:12]
+                    CB_LONG[k] = d
+                    full = "#" + k + tail
+                b = {**b, "callback_data": full}
+            new.append(b)
+        rows.append(new)
+    return {**markup, "inline_keyboard": rows}
+
+
 def btn(text, data):
-    return {"text": text, "callback_data": data[:64]}
+    return {"text": text, "callback_data": data}
 
 
 def inline(*rows):
@@ -132,7 +196,11 @@ TO_SAFE = [btn("🔐 Назад в сейф", "safe:open")]
 
 # ───────────────────────── вызов Комбайна ─────────────────────────
 def kb(*args, env=None, timeout=900):
-    """Запустить `kombain.sh cli ...`. Вернуть (код, вывод)."""
+    """Запустить `kombain.sh cli ...`. Вернуть (код, вывод).
+    Выбран другой сервер (🗂 Мои серверы) — команда уходит туда по SSH."""
+    t = cur_target()
+    if t:
+        return remote_kb(t, args, env, timeout, text=True)
     e = dict(os.environ)
     e.pop("BOT_TOKEN", None)
     if env:
@@ -147,6 +215,10 @@ def kb(*args, env=None, timeout=900):
 
 def kb_raw(*args, timeout=60):
     """То же, но вывод байтами (картинка QR)."""
+    t = cur_target()
+    if t:
+        code, out = remote_kb(t, args, None, timeout, text=False)
+        return code, out
     try:
         r = subprocess.run([KB, "cli", *args], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL,
                            env={k: v for k, v in os.environ.items() if k != "BOT_TOKEN"})
@@ -183,7 +255,10 @@ def run_long(chat, title, func):
         send(chat, "⏳ Уже что-то делаю. Дождись конца.")
         return
 
+    target = TARGET
+
     def work():
+        _tl.target = target
         try:
             func()
         except Exception:
@@ -196,12 +271,18 @@ def run_long(chat, title, func):
 
 
 # ───────────────────────── Сейф: место сбора ─────────────────────────
+def rec_key(domain):
+    """Записи проверены для домена НА ЭТОМ сервере — у другого сервера свой адрес."""
+    t = cur_target()
+    return (domain, t["ip"] if t else "local")
+
+
 def check_records(domain, ip):
-    if records_ok.get(domain):
+    if records_ok.get(rec_key(domain)):
         return True, ""
     code, out = kb("aiproxy", "check-dns", domain, ip, timeout=60)
     if code == 0:
-        records_ok[domain] = True
+        records_ok[rec_key(domain)] = True
     return code == 0, out
 
 
@@ -215,7 +296,7 @@ def make_records(chat, force=False):
     code, out = kb("aiproxy", "make-dns", *(["--force"] if force else []),
                    env={"KB_SERVER_IP": ip}, timeout=90)
     if code == 0:
-        records_ok[domain] = True
+        records_ok[rec_key(domain)] = True
         send_pre(chat, out, "🌐 Записи в Cloudflare сделала сама:")
         return True
     if code == 3:
@@ -233,7 +314,7 @@ def safe_screen(chat):
     state.pop(chat, None)
     safe, info = sec_info(), aip_info()
     domain = safe.get("domain")
-    rec = bool(records_ok.get(domain)) if domain else False
+    rec = bool(records_ok.get(rec_key(domain))) if domain else False
     has_key, client = bool(safe.get("cloudflare")), safe.get("client")
     mark = lambda ok: "✅" if ok else "⬜"
 
@@ -308,7 +389,9 @@ def safe_put(chat, what, text, msg_id):
         send(chat, "🔐 Сообщение удалено" + (", ключ проверен и лежит в сейфе." if code == 0 else "."))
     elif what == "domain":
         code, out = kb("secrets", "set-domain", t, timeout=30)
-        records_ok.clear()
+        here = rec_key("")[1]
+        for k in [k for k in records_ok if k[1] == here]:
+            records_ok.pop(k, None)
     else:
         code, out = kb("secrets", "set-client", t, timeout=30)
     if code != 0:
@@ -344,7 +427,7 @@ def safe_go(chat):
     if not (safe.get("domain") and safe.get("cloudflare") and safe.get("client")):
         safe_screen(chat)
         return
-    if not records_ok.get(safe["domain"]) and not make_records(chat):
+    if not records_ok.get(rec_key(safe["domain"])) and not make_records(chat):
         return
 
     def job():
@@ -703,9 +786,473 @@ def server_screen(chat):
            "free -h | awk '/Mem:/ {print \"Память: занято \" $3 \" из \" $2}'; "
            "df -h / | awk 'NR==2 {print \"Диск: занято \" $3 \" из \" $2 \" (\" $5 \")\"}'; "
            "echo; docker ps --format '{{.Names}}: {{.Status}}' 2>/dev/null")
+    n = len(srv_load())
+    t = cur_target()
+    if t:
+        try:
+            out = subprocess.run(ssh_base(t) + [cmd], capture_output=True, text=True, timeout=40,
+                                 stdin=subprocess.DEVNULL).stdout
+        except subprocess.TimeoutExpired:
+            out = "Сервер не ответил за 40 секунд."
+        send_pre(chat, out, "📊 <b>Сервер</b>",
+                 inline([btn("🔄 Обновить Комбайн там", f"srv:upd:{t['ip']}")],
+                        [btn(f"🗂 Мои серверы ({n})", "srv:list"), btn("🏠 К стенду", "srv:local")]))
+        return
     out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=30).stdout
     send_pre(chat, out, f"📊 <b>Сервер</b> · Комбайн {VERSION}",
-             inline([btn("🔄 Обновить Комбайн", "upd:ask")]))
+             inline([btn("🔄 Обновить Комбайн", "upd:ask")],
+                    [btn("➕ Новый сервер — проверить", "probe:ask")],
+                    [btn(f"🗂 Мои серверы ({n})", "srv:list")]))
+
+
+# ───────────────────────── Проверка нового сервера ─────────────────────────
+# Купил сервер → IP и пароль → бот заходит туда по SSH, гоняет lib/probe-remote.sh и пишет отчёт.
+# Пароль не сохраняется. На проверяемый сервер ничего не ставится (кроме curl, если его нет).
+PROBE_SCRIPT = os.path.join(KB_SRC, "lib", "probe-remote.sh")
+PROBE_BAD = {   # сети, которые сразу в мусор
+    "AS215540": "в этой сети выходные узлы Tor и прокси-сервисы — нейронки такие адреса режут",
+    "AS210644": "Aeza — под санкциями США, нейронки режут",
+    "AS216246": "Aeza — под санкциями США, нейронки режут",
+    "AS211522": "сеть, куда переехала Aeza после санкций",
+}
+PROBE_WARN = {  # не мусор, но знать надо
+    "AS57043": "HOSTKEY — та же сеть, что у AdminVPS (Италия, Нидерланды). Нейронки пускает, "
+               "но запасным к серверам AdminVPS не годится: забанят сеть — лягут оба.",
+}
+YES_NO = {"yes": "✅", "no": "❌"}
+
+
+def probe_ask(chat):
+    state[chat] = {"step": "probe_host"}
+    send(chat, "➕ <b>Новый сервер — проверка</b>\n\n"
+               "Купил сервер? Пришли его <b>IP</b> (если хостер дал другой порт — <code>IP:порт</code>).\n"
+               "Проверю: чья сеть, кем его видит Google, пускают ли ChatGPT, Claude и Gemini.\n"
+               "На сервер ничего не ставлю.", inline(CANCEL))
+
+
+def probe_host(chat, text):
+    t = text.strip()
+    host, port = t, "22"
+    if t.count(":") == 1:
+        host, port = t.split(":")
+    try:
+        ipaddress.ip_address(host)
+        if not port.isdigit() or not 0 < int(port) < 65536:
+            raise ValueError
+    except ValueError:
+        send(chat, "Это не IP. Пример: <code>203.0.113.10</code> или <code>203.0.113.10:49222</code>",
+             inline(CANCEL))
+        return
+    state[chat] = {"step": "probe_pass", "host": host, "port": port}
+    send(chat, f"🔑 Пароль <b>root</b> от <code>{host}</code> — тот, что прислал хостер.\n\n"
+               "⚠️ Как только придёт — удалю твоё сообщение из чата. Пароль нигде не сохраняю, "
+               "он нужен один раз, чтобы зайти.", inline(CANCEL))
+
+
+def probe_pass(chat, text, msg_id):
+    delete(chat, msg_id)
+    st = state.pop(chat, {})
+    host, port, password = st.get("host"), st.get("port", "22"), text.strip()
+    if not host or not password:
+        send(chat, "Начни заново.", inline([btn("➕ Новый сервер", "probe:ask")]))
+        return
+
+    def job():
+        ok, report = probe_run(host, port, password)
+        rows = [[btn("🔁 Проверить ещё раз", "probe:ask")], [btn("🏠 Меню", "home")]]
+        if "изменился" in report and not ok:
+            rows.insert(0, [btn("🔑 Сервер переустановлен — забыть старый ключ", f"probe:forget:{host}:{port}")])
+        if ok:
+            PW_CACHE[host] = (password, port, time.time())
+            rows.insert(0, [btn("💾 Оставить сервер у бота", f"srv:save:{host}")])
+        send(chat, report, inline(*rows))
+
+    send(chat, "🔐 Сообщение с паролем удалено.")
+    run_long(chat, f"Захожу на {host} и проверяю. До двух минут…", job)
+
+
+def probe_run(host, port, password):
+    if not shutil.which("sshpass"):
+        subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], capture_output=True, timeout=300,
+                       env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+        if not shutil.which("sshpass"):
+            subprocess.run(["apt-get", "update", "-qq"], capture_output=True, timeout=300)
+            subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], capture_output=True, timeout=300,
+                           env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+    if not shutil.which("sshpass"):
+        return False, "❌ Не смогла поставить sshpass на этот сервер — без него не зайти по паролю."
+    with open(PROBE_SCRIPT) as f:
+        script = f.read()
+    r = pw_ssh(host, port, password, "bash -s", script, 240)
+    if r is None:
+        return False, f"❌ <code>{host}</code>: проверка не уложилась в 4 минуты. Связь плохая или сервер висит."
+    if hostkey_changed(r):
+        return False, hostkey_text(host)
+    if r.returncode == 5:
+        return False, f"❌ <code>{host}</code>: неверный пароль. Скопируй его у хостера ещё раз."
+    return probe_parse(host, port, r)
+
+
+def probe_parse(host, port, r):
+    if "PROBE_BEGIN" not in r.stdout:
+        why = esc((r.stderr or r.stdout).strip()[-300:]) or "без объяснений"
+        return False, (f"❌ Не зашла на <code>{host}</code>:{port}.\n<pre>{why}</pre>\n"
+                       "Проверь IP и порт. Сервер мог ещё не подняться — подожди пару минут.")
+    d = {}
+    for line in r.stdout.split("PROBE_BEGIN", 1)[1].split("PROBE_END", 1)[0].splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            if v.strip():
+                d[k.strip()] = v.strip()
+    PROBE_INFO[host] = d
+    return True, probe_report(host, d)
+
+
+def pw_ssh(host, port, password, remote_cmd, stdin_text="", timeout=120):
+    """Зайти по паролю (sshpass), выполнить команду. None — не уложились по времени."""
+    env = {k: v for k, v in os.environ.items() if k != "BOT_TOKEN"}
+    env["SSHPASS"] = password
+    os.makedirs(ADMIN_DIR, exist_ok=True)
+    # Первый вход — запоминаю ключ сервера; сменился — ssh остановится до отправки пароля.
+    cmd = ["sshpass", "-e", "ssh", "-p", str(port),
+           "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
+           "-o", "LogLevel=ERROR",
+           "-o", "ConnectTimeout=20", "-o", "PubkeyAuthentication=no",
+           "-o", "PreferredAuthentications=password,keyboard-interactive",
+           "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
+           f"root@{host}", remote_cmd]
+    try:
+        return subprocess.run(cmd, input=stdin_text, capture_output=True, text=True, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        return None
+    finally:
+        env.pop("SSHPASS", None)
+
+
+# ───────────────────────── Мои серверы (режим админа) ─────────────────────────
+# Сервер, оставленный после проверки: бот кладёт туда свой ключ и дальше ходит без пароля.
+# Выбрал сервер — все кнопки внизу (VLESS, AmneziaWG, WARP, Telegram…) работают с ним.
+ADMIN_DIR = "/opt/kombain/bot"
+ADMIN_KEY = os.path.join(ADMIN_DIR, "admin_key")
+SERVERS_FILE = os.path.join(ADMIN_DIR, "servers.json")
+KNOWN_HOSTS = os.path.join(ADMIN_DIR, "known_hosts")
+TARGET = None        # выбранный сервер (dict) или None — этот сервер
+PW_CACHE = {}        # ip -> (пароль, порт, время) — только в памяти, 15 минут после проверки
+PROBE_INFO = {}      # ip -> данные последней проверки
+PW_TTL = 15 * 60
+REMOTE_BOOT = ("command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl >/dev/null; }; "
+               "[ -f /opt/kombain/src/lib/common.sh ] || { curl -fsSL "
+               "https://raw.githubusercontent.com/ln71v/kombain/main/kombain.sh -o /tmp/kombain-start.sh "
+               "&& bash /tmp/kombain-start.sh cli secrets info >/dev/null 2>&1; }; ")
+
+
+def hostkey_changed(r):
+    return r is not None and r.returncode == 255 and "Host key verification failed" in (r.stderr or "")
+
+
+def hostkey_text(host):
+    return (f"⚠️ <b>Ключ сервера <code>{host}</code> изменился</b> с прошлого раза. Пароль НЕ отправила.\n\n"
+            "Так бывает, если сервер переустановили у хостера. Если не переустанавливали — кто-то может "
+            "подменять связь: не продолжай.")
+
+
+def forget_hostkey(host, port="22"):
+    name = host if str(port) == "22" else f"[{host}]:{port}"
+    subprocess.run(["ssh-keygen", "-R", name, "-f", KNOWN_HOSTS], capture_output=True, timeout=20)
+
+
+def srv_load():
+    try:
+        with open(SERVERS_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def srv_store(lst):
+    os.makedirs(ADMIN_DIR, exist_ok=True)
+    tmp = SERVERS_FILE + ".new"
+    with open(tmp, "w") as f:
+        json.dump(lst, f, ensure_ascii=False, indent=1)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, SERVERS_FILE)
+
+
+def srv_get(ip):
+    return next((x for x in srv_load() if x["ip"] == ip), None)
+
+
+def ssh_base(srv):
+    return ["ssh", "-i", ADMIN_KEY, "-p", str(srv.get("port", "22")),
+            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
+            "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "ConnectTimeout=20",
+            "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", "-o", "LogLevel=ERROR",
+            f"root@{srv['ip']}"]
+
+
+def remote_kb(srv, args, env, timeout, text=True):
+    envs = " ".join(shlex.quote(f"{k}={v}") for k, v in (env or {}).items())
+    cmd = REMOTE_BOOT + (f"env {envs} " if envs else "") + "/opt/kombain/src/kombain.sh cli " + \
+        " ".join(shlex.quote(str(a)) for a in args)
+    try:
+        r = subprocess.run(ssh_base(srv) + [cmd], capture_output=True, text=text, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        return 124, ("Команда не уложилась по времени." if text else b"")
+    if not text:
+        return r.returncode, r.stdout
+    out = (r.stdout + r.stderr).strip()
+    if r.returncode == 255 and "Host key verification failed" in (r.stderr or ""):
+        out = (f"Ключ сервера {srv['ip']} изменился — команду не отправила. Переустанавливал сервер? "
+               "«🗂 Мои серверы» → сервер → «🔍 Проверить снова» — там кнопка, что делать дальше.")
+    elif r.returncode == 255 and not r.stdout:
+        out = f"Не достучалась до {srv['ip']} по ключу: {out[-200:]}"
+    return r.returncode, out
+
+
+def ensure_key():
+    if not os.path.exists(ADMIN_KEY):
+        os.makedirs(ADMIN_DIR, exist_ok=True)
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "kombain-admin",
+                        "-f", ADMIN_KEY], capture_output=True, timeout=60)
+    if not os.path.exists(ADMIN_KEY + ".pub"):   # .pub потерялся (бэкап, руками) — достаю из приватного
+        r = subprocess.run(["ssh-keygen", "-y", "-f", ADMIN_KEY], capture_output=True, text=True, timeout=30)
+        if r.returncode == 0 and r.stdout.strip():
+            with open(ADMIN_KEY + ".pub", "w") as f:
+                f.write(r.stdout.strip() + " kombain-admin\n")
+    with open(ADMIN_KEY + ".pub") as f:
+        return f.read().strip()
+
+
+def srv_save_ask(chat, ip):
+    pw = PW_CACHE.get(ip)
+    fresh = bool(pw and time.time() - pw[2] < PW_TTL)
+    if srv_get(ip) and not fresh:
+        srv_open(chat, ip)
+        return
+    if fresh:   # и для уже сохранённого: после переустановки сервера ключ бота надо положить заново
+        srv_save_run(chat, ip, pw[1], pw[0])
+        return
+    PW_CACHE.pop(ip, None)
+    state[chat] = {"step": "srv_pass", "host": ip, "port": (pw or (None, "22"))[1]}
+    send(chat, f"🔑 Пароль root от <code>{ip}</code> ещё раз — прошло больше 15 минут, я его уже забыла.\n"
+               "Сообщение сразу удалю.", inline(CANCEL))
+
+
+def srv_pass(chat, text, msg_id):
+    delete(chat, msg_id)
+    st = state.pop(chat, {})
+    if st.get("host"):
+        srv_save_run(chat, st["host"], st.get("port", "22"), text.strip())
+
+
+def srv_save_run(chat, ip, port, password):
+    def job():
+        pub = ensure_key()
+        q = shlex.quote(pub)
+        r = pw_ssh(ip, port, password,
+                   "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && "
+                   f"(grep -qxF {q} ~/.ssh/authorized_keys || echo {q} >> ~/.ssh/authorized_keys) && echo KEY_OK", "", 60)
+        PW_CACHE.pop(ip, None)
+        if hostkey_changed(r):
+            send(chat, hostkey_text(ip), inline([btn("🔑 Сервер переустановлен — забыть старый ключ",
+                                                     f"probe:forget:{ip}:{port}")], [btn("🏠 Меню", "home")]))
+            return
+        if r is None or "KEY_OK" not in r.stdout:
+            why = "неверный пароль" if r is not None and r.returncode == 5 else "не зашла"
+            send(chat, f"❌ Не смогла оставить <code>{ip}</code>: {why}.",
+                 inline([btn("🔁 Ещё раз", f"srv:save:{ip}")], [btn("🏠 Меню", "home")]))
+            return
+        d = PROBE_INFO.get(ip, {})
+        name = " ".join(x for x in (d.get("COUNTRY"), d.get("CITY")) if x) or ip
+        srv = {"ip": ip, "port": str(port), "name": name, "added": time.strftime("%Y-%m-%d")}
+        t = subprocess.run(ssh_base(srv) + ["echo OK"], capture_output=True, text=True, timeout=40,
+                           stdin=subprocess.DEVNULL)
+        if "OK" not in t.stdout:
+            send(chat, f"❌ Ключ положила, но зайти по нему не вышло:\n<pre>{esc(t.stderr[-300:])}</pre>")
+            return
+        lst = [x for x in srv_load() if x["ip"] != ip] + [srv]
+        srv_store(lst)
+        send(chat, f"💾 Оставила: <b>{esc(name)}</b> · <code>{ip}</code>.\n"
+                   "Дальше хожу туда по своему ключу — пароль больше не нужен и нигде не лежит.\n\n"
+                   "Кнопки внизу пока работают с прежним сервером. Переключиться — кнопкой ниже.",
+             inline([btn("🎯 Работать с ним", f"srv:open:{ip}")], [btn("🗂 Мои серверы", "srv:list")]))
+    run_long(chat, f"Кладу свой ключ на {ip}…", job)
+
+
+def srv_list(chat):
+    lst = srv_load()
+    rows = [[btn(("✅ " if TARGET and TARGET["ip"] == x["ip"] else "🖥 ") + f"{x['name']} · {x['ip']}",
+                 f"srv:open:{x['ip']}")] for x in lst]
+    rows.append([btn(("✅ " if not TARGET else "🏠 ") + "Этот сервер (где живёт бот)", "srv:local")])
+    rows.append([btn("➕ Новый сервер — проверить", "probe:ask")])
+    head = "🗂 <b>Мои серверы</b>\n\n"
+    head += ("Пока пусто. Проверь новый сервер и нажми «💾 Оставить сервер у бота»." if not lst else
+             "Выбери сервер — и все кнопки внизу (VLESS, AmneziaWG, WARP, Telegram) будут работать с ним.")
+    send(chat, head, inline(*rows))
+
+
+def srv_open(chat, ip):
+    srv = srv_get(ip)
+    if not srv:
+        send(chat, "Такого сервера в списке нет.", inline([btn("🗂 Мои серверы", "srv:list")]))
+        return
+    set_target(srv)
+    state.pop(chat, None)   # недописанный ввод относился к прошлому серверу
+    send(chat, "Теперь кнопки внизу — 🔑 VLESS, 🛡 AmneziaWG, 🌐 WARP, ✈️ Telegram, 📊 Сервер — работают "
+               "<b>с этим сервером</b>. Сверху каждого сообщения будет 🎯 с его именем.\n\n"
+               "Первый раз Комбайн там поставится сам — первая кнопка займёт минуту-две.",
+         inline([btn("🔍 Проверить снова", f"srv:probe:{ip}"), btn("🔄 Обновить Комбайн там", f"srv:upd:{ip}")],
+                [btn("🗑 Убрать сервер", f"srv:del:{ip}")],
+                [btn("🏠 Вернуться к своему серверу", "srv:local")]))
+
+
+def srv_local(chat):
+    set_target(None)
+    state.pop(chat, None)
+    send(chat, "🏠 Снова работаю со своим сервером (где живёт бот).", MAIN_KB)
+
+
+def srv_probe(chat, ip):
+    srv = srv_get(ip)
+    if not srv:
+        return
+
+    def job():
+        with open(PROBE_SCRIPT) as f:
+            script = f.read()
+        try:
+            r = subprocess.run(ssh_base(srv) + ["bash -s"], input=script, capture_output=True, text=True,
+                               timeout=240)
+        except subprocess.TimeoutExpired:
+            send(chat, "❌ Проверка не уложилась в 4 минуты.",
+                 inline([btn("🔁 Ещё раз", f"srv:probe:{ip}"), btn("🗂 Мои серверы", "srv:list")]))
+            return
+        if hostkey_changed(r):
+            send(chat, hostkey_text(ip) + "\n\nЕсли переустанавливал: забудь старый ключ, потом "
+                       "«➕ Новый сервер — проверить» с паролем и «💾 Оставить» — положу свой ключ заново.",
+                 inline([btn("🔑 Сервер переустановлен — забыть старый ключ",
+                             f"probe:forget:{ip}:{srv.get('port', '22')}")], [btn("🗂 Мои серверы", "srv:list")]))
+            return
+        send(chat, probe_parse(ip, srv["port"], r)[1],
+             inline([btn("◀️ К серверу", f"srv:open:{ip}"), btn("🗂 Мои серверы", "srv:list")],
+                    [btn("🏠 Вернуться к своему серверу", "srv:local")]))
+    run_long(chat, f"Проверяю {ip}…", job)
+
+
+def srv_upd(chat, ip):
+    srv = srv_get(ip)
+    if not srv:
+        return
+
+    def job():
+        try:
+            r = subprocess.run(ssh_base(srv) + [REMOTE_BOOT + "/opt/kombain/src/kombain.sh --update cli secrets info "
+                                                ">/dev/null && cat /opt/kombain/src/VERSION"],
+                               capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+            out = r.stdout.strip().splitlines()[-1:] or ["?"]
+            send(chat, f"✅ Комбайн на <code>{ip}</code>: версия <b>{esc(out[0])}</b>." if r.returncode == 0 else
+                 f"❌ Не обновилось:\n<pre>{esc((r.stderr or r.stdout)[-400:])}</pre>")
+        except subprocess.TimeoutExpired:
+            send(chat, "❌ Не уложилось в 5 минут.")
+    run_long(chat, f"Обновляю Комбайн на {ip}…", job)
+
+
+def srv_del(chat, ip, sure=False):
+    global TARGET
+    srv = srv_get(ip)
+    if not srv:
+        return
+    if not sure:
+        send(chat, f"🗑 Убрать <b>{esc(srv['name'])}</b> · <code>{ip}</code> из списка?\n\n"
+                   "Сотру свой ключ с того сервера и забуду его. Что там уже стоит (VPN, ключи) — "
+                   "не трогаю, оно продолжит работать. Сам сервер удаляй у хостера.",
+             inline([btn("🗑 Да, убрать", f"srv:delok:{ip}")], CANCEL))
+        return
+
+    def job():
+        pub = ensure_key().split()[1]
+        try:
+            r = subprocess.run(ssh_base(srv) + [f"sed -i '\\#{pub}#d' ~/.ssh/authorized_keys && echo DEL_OK"],
+                               capture_output=True, text=True, timeout=40, stdin=subprocess.DEVNULL)
+            gone = "DEL_OK" in r.stdout
+        except subprocess.TimeoutExpired:
+            gone = False
+        srv_store([x for x in srv_load() if x["ip"] != ip])
+        forget_hostkey(ip, srv.get("port", "22"))
+        if TARGET and TARGET["ip"] == ip:
+            set_target(None)
+        send(chat, ("✅ Ключ стёрла, сервер забыла." if gone else
+                    "⚠️ Сервер забыла, но стереть ключ не вышло (сервер не ответил). Если он ещё жив — "
+                    "убери строку kombain-admin из /root/.ssh/authorized_keys руками."), MAIN_KB)
+    run_long(chat, f"Убираю {ip}…", job)
+
+
+def srv_callback(chat, data):
+    parts = data.split(":", 2)
+    act, arg = parts[1], (parts[2] if len(parts) > 2 else "")
+    if act == "list":
+        srv_list(chat)
+    elif act == "local":
+        srv_local(chat)
+    elif act == "save":
+        srv_save_ask(chat, arg)
+    elif act == "open":
+        srv_open(chat, arg)
+    elif act == "probe":
+        srv_probe(chat, arg)
+    elif act == "upd":
+        srv_upd(chat, arg)
+    elif act == "del":
+        srv_del(chat, arg)
+    elif act == "delok":
+        srv_del(chat, arg, sure=True)
+
+
+def probe_report(host, d):
+    org = d.get("ORG", "")
+    asn = org.split()[0] if org.startswith("AS") else ""
+    gl, country = d.get("GL", "?"), d.get("COUNTRY", "?")
+    ram = d.get("RAM_MB", "")
+    ram = f"{int(ram) / 1024:.1f} ГБ" if ram.isdigit() else "?"
+    ai = {k: d.get(k.upper(), "?") for k in ("ChatGPT", "Claude", "Gemini")}
+    title = "Сервер" if srv_get(host) else "Новый сервер"
+    lines = [f"🔍 <b>{title}</b> <code>{esc(d.get('IP') or host)}</code>", "",
+             f"🏢 Сеть (AS): <b>{esc(org or '?')}</b>"]
+    reg = " · ".join(x for x in (d.get("REG_OWNER"), d.get("REG_NET")) if x)
+    if reg:
+        lines.append(f"📄 Кто выдал IP (реестр): <b>{esc(reg)}</b>")
+    if d.get("IPAPI_ISP"):
+        isp = d["IPAPI_ISP"] + (f" / {d['IPAPI_ORG']}" if d.get("IPAPI_ORG") and d["IPAPI_ORG"] != d["IPAPI_ISP"] else "")
+        lines.append(f"🏠 Провайдер (как на 2ip): {esc(isp)}")
+    if d.get("HOST"):
+        lines.append(f"🏷 Имя адреса: {esc(d['HOST'])}")
+    lines += [f"🖥 {esc(d.get('OS', '?'))} · память {ram} · диск {esc(d.get('DISK', '?'))}", "",
+              "🗺 <b>Как видят страну:</b>",
+              f"   ipinfo: {esc(country)}{' (' + esc(d['CITY']) + ')' if d.get('CITY') else ''} · "
+              f"ip-api: {esc(d.get('IPAPI_COUNTRY', '?'))} · реестр: {esc(d.get('REG_COUNTRY', '?'))}",
+              f"   Google: <b>{esc(gl)}</b> {'❌' if gl == 'RU' else ('✅' if gl not in ('?', '') else '❔')}"]
+    marks = [m for k, m in (("IPAPI_HOSTING", "хостинг"), ("IPAPI_PROXY", "прокси/VPN")) if d.get(k) == "yes"]
+    if marks:
+        lines.append(f"🚩 Метки в базах: {', '.join(marks)}" + (" — плохо для нейронок" if "прокси/VPN" in marks else " — это норма для VPS"))
+    lines += ["",
+              "🤖 Нейронки (по признакам с сервера):",
+              "   " + "  ".join(f"{k} {YES_NO.get(v, '❔')}" for k, v in ai.items()), ""]
+    if asn in PROBE_BAD:
+        lines.append(f"🗑 <b>Удаляй, пока не списали деньги.</b>\n{asn}: {PROBE_BAD[asn]}.")
+    else:
+        if asn in PROBE_WARN:
+            lines.append(f"⚠️ {PROBE_WARN[asn]}")
+        if gl == "RU" or ai["Gemini"] == "no":
+            lines.append("⚠️ <b>Gemini тут не пойдёт.</b> Под VPN, Telegram и ChatGPT/Claude — годится.")
+        elif "?" in (gl, ai["Gemini"]):
+            lines.append("❔ Часть проверок не ответила. Повтори через минуту.")
+        else:
+            lines.append("✅ <b>Похоже, годен.</b> Последнее слово — Gemini вживую с телефона без VPN, "
+                         "после установки нейронок.")
+        if gl not in ("?", "", country) and country not in ("?", ""):
+            lines.append(f"ℹ️ Базы говорят {esc(country)}, а Google считает {esc(gl)} — Google тут главнее.")
+    return "\n".join(lines)
 
 
 # ───────────────────────── WARP ─────────────────────────
@@ -1081,7 +1628,9 @@ HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
         "🛡 <b>AmneziaWG</b> — VPN 3.1: установка, ключи и QR для устройств.\n"
         "🌐 <b>WARP</b> — выход через Cloudflare: включаешь по устройствам.\n"
         "✈️ <b>Telegram</b> — прокси, чтобы Telegram работал без VPN.\n"
-        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n\n"
+        "📊 <b>Сервер</b> — IP, память, диск, что запущено.\n"
+        "➕ <b>Новый сервер</b> — купил сервер? Проверю его до установки: /new\n"
+        "🗂 <b>Мои серверы</b> — оставленные серверы, управлять ими отсюда: /servers, назад к своему — /local\n\n"
         "\n"
         "Обновить Комбайн — /update или «📊 Сервер» → «🔄 Обновить».\n"
         "Отменить любой шаг — /cancel.")
@@ -1096,6 +1645,15 @@ def on_message(m):
     if text in ("/start", "/menu"):
         state.pop(chat, None)
         send(chat, f"Привет! Я пульт твоего сервера. Комбайн {VERSION}.\nВыбирай внизу 👇", MAIN_KB)
+        return
+    if text == "/new":
+        probe_ask(chat)
+        return
+    if text == "/servers":
+        srv_list(chat)
+        return
+    if text == "/local":
+        srv_local(chat)
         return
     if text == "/cancel":
         state.pop(chat, None)
@@ -1119,6 +1677,12 @@ def on_message(m):
         vls_add(chat, text)
     elif step == "tgu_add":
         tgu_add_name(chat, text)
+    elif step == "probe_host":
+        probe_host(chat, text)
+    elif step == "probe_pass":
+        probe_pass(chat, text, m["message_id"])
+    elif step == "srv_pass":
+        srv_pass(chat, text, m["message_id"])
     else:
         send(chat, "Выбирай кнопкой внизу 👇", MAIN_KB)
 
@@ -1130,6 +1694,19 @@ def on_callback(q):
         call("answerCallbackQuery", callback_query_id=q["id"])
     except Exception:
         pass
+    if data.startswith("#") or not (data in FREE_CB or data.startswith(FREE_PREFIX)):
+        data, _, tag = data.rpartition("~")
+        if not data or tag != srv_tag():
+            t = cur_target()
+            where = f"{esc(t['name'])} · {t['ip']}" if t else "этот сервер (где живёт бот)"
+            send(chat, "⚠️ Эта кнопка от другого сервера или из старого сообщения — не выполняю.\n"
+                       f"Сейчас выбран: <b>{where}</b>. Открой нужное меню заново кнопкой внизу 👇", MAIN_KB)
+            return
+        if data.startswith("#"):
+            data = CB_LONG.get(data[1:], "")
+            if not data:
+                send(chat, "⚠️ Кнопка устарела (бот перезапускался) — открой меню заново 👇", MAIN_KB)
+                return
     if data == "cancel":
         state.pop(chat, None)
         send(chat, "Отменено.", MAIN_KB)
@@ -1144,6 +1721,15 @@ def on_callback(q):
         awg_callback(chat, data)
     elif data.startswith("vls:"):
         vls_callback(chat, data)
+    elif data == "probe:ask":
+        probe_ask(chat)
+    elif data.startswith("probe:forget:"):
+        host, _, port = data[len("probe:forget:"):].rpartition(":")
+        forget_hostkey(host, port or "22")
+        send(chat, f"🔑 Старый ключ <code>{esc(host)}</code> забыла. Проверь сервер заново — запомню новый.",
+             inline([btn("➕ Новый сервер — проверить", "probe:ask")]))
+    elif data.startswith("srv:"):
+        srv_callback(chat, data)
     elif data.startswith("upd:"):
         upd_callback(chat, data)
     elif data.startswith("warp:"):
@@ -1207,6 +1793,9 @@ def main():
                 continue
             if (src.get("from") or {}).get("id") != ADMIN:
                 continue   # чужим не отвечаем
+            # Сервер фиксируется на всю обработку: фоновая операция (например «Оставить сервер»)
+            # может сменить выбор, но уже начатое нажатие доделается там, где его проверили.
+            _tl.target = TARGET
             try:
                 if "message" in u:
                     on_message(u["message"])
@@ -1214,6 +1803,8 @@ def main():
                     on_callback(u["callback_query"])
             except Exception:
                 traceback.print_exc()
+            finally:
+                del _tl.target
 
 
 if __name__ == "__main__":

@@ -90,15 +90,79 @@ EOF
   systemctl daemon-reload
 }
 
+tgu_api_up() {
+  tgu_running && grep -q '^200' <<<"$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$TGU_API/users")"
+}
+
+# Бэкап всего, что есть у telemt (конфиг с людьми и их ключами): архив с датой в $KB_BACKUP.
+# Печатает путь к архиву. Нечего сохранять — пустая строка и успех.
+tgu_backup() {
+  local d f
+  d=$(readlink -f "$TGU_STATE" 2>/dev/null)
+  { [ -n "$d" ] && [ -d "$d" ]; } || { echo ""; return 0; }
+  mkdir -p "$KB_BACKUP" && chmod 700 "$KB_BACKUP"
+  f="$KB_BACKUP/telemt-$(date +%Y%m%d-%H%M%S).tar.gz"
+  { tar -czf "$f" -C "$(dirname "$d")" "$(basename "$d")" 2>/dev/null && [ -s "$f" ]; } || return 1
+  chmod 600 "$f"
+  echo "$f"
+}
+
+# Достать из архива все разделы [access.*]: люди, ключи, кто выключен ([access.user_enabled]) и прочее.
+tgu_saved_access() {
+  [ -s "$1" ] || return 0
+  tar -xzOf "$1" --wildcards '*/config.toml' 2>/dev/null \
+    | awk '/^\[/{on=($0 ~ /^\[\[?access[.\]]/)} on && NF'
+}
+
+# Порт из конфига в архиве (чтобы старые ссылки остались рабочими)
+tgu_saved_port() {
+  [ -s "$1" ] || return 0
+  tar -xzOf "$1" --wildcards '*/config.toml' 2>/dev/null \
+    | awk '/^\[/{s=($0=="[server]")} s && /^port *=/{gsub(/[^0-9]/,""); print; exit}'
+}
+
+# Самый свежий бэкап, в котором реально есть люди ([access.users]). Пусто — нет такого.
+tgu_latest_backup() {
+  local f
+  for f in $(ls -1t "$KB_BACKUP"/telemt-*.tar.gz 2>/dev/null); do
+    grep -q '^\[access\.users\]' <<<"$(tgu_saved_access "$f")" && { echo "$f"; return 0; }
+  done
+}
+
+# Метка «переустановка не закончена»: архив и порт. Пока она есть, следующая установка
+# вернёт людей из этого архива, даже если прошлая попытка упала на середине.
+TGU_PENDING="$KB_BACKUP/telemt-restore-pending"
+
 tgu_install_core() {
+  local saved="" access="" _t old_port=""
   if tgu_installed; then
-    tgu_running && grep -q '^200' <<<"$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$TGU_API/users")" \
-      && { warn "Уже установлено и работает."; return 0; }
-    warn "Стоит, но не работает — переставляю начисто."
-    tgu_remove_core >/dev/null
+    tgu_load_env; old_port="${TGU_PORT:-}"
+    tgu_api_up && { warn "Уже установлено и работает."; return 0; }
+    warn "Стоит, но не отвечает — пробую просто перезапустить."
+    systemctl restart kombain-telemt >/dev/null 2>&1
+    for _t in $(seq 1 15); do tgu_api_up && { ok "Поднялся после перезапуска, люди на месте."; return 0; }; sleep 1; done
+    saved=$(tgu_backup) || { err "Не смогла сохранить людей и ключи — переустановку отменяю, ничего не трогала."; return 1; }
+    if [ -n "$saved" ]; then
+      printf '%s\n%s\n' "$saved" "$old_port" >"$TGU_PENDING" && chmod 600 "$TGU_PENDING"
+    fi
+    warn "Не поднялся — переставляю. Люди и ключи сохранены: $saved"
+    tgu_remove_core --no-backup >/dev/null
+  elif [ -s "$TGU_PENDING" ]; then
+    saved=$(sed -n 1p "$TGU_PENDING"); old_port=$(sed -n 2p "$TGU_PENDING")
+    [ -s "$saved" ] && warn "Прошлая переустановка не закончилась — возвращаю людей из $saved" || saved=""
+  fi
+  access=$(tgu_saved_access "$saved")
+  # Людей в нём нет (конфиг был битый) или ставим после «Убрать целиком» — беру последний годный бэкап
+  if ! grep -q '^\[access\.users\]' <<<"$access"; then
+    local last; last=$(tgu_latest_backup)
+    if [ -n "$last" ]; then
+      saved="$last"; access=$(tgu_saved_access "$last")
+      [ -n "$old_port" ] || old_port=$(tgu_saved_port "$last")
+      warn "Нашла бэкап людей и ключей: $last — возвращаю. Начать с чистого листа: удали этот файл и поставь снова."
+    fi
   fi
   ensure_pkgs curl jq tar qrencode || return 1
-  local port="${KB_TGU_PORT:-9443}" ip
+  local port="${KB_TGU_PORT:-${old_port:-9443}}" ip   # переустановка — на прежний порт, чтобы ссылки не сменились
   if [ -n "$(port_owner "$port" tcp)" ]; then
     [ -z "${KB_TGU_PORT:-}" ] && [ "$(port_owner "$port" tcp)" = "telegram-mtg" ] && port=9444
     [ -z "$(port_owner "$port" tcp)" ] || { err "Порт $port занят: $(port_owner "$port" tcp)"; return 1; }
@@ -147,9 +211,13 @@ mask = true
 tls_emulation = true
 tls_front_dir = "tlsfront"
 
-[access.users]
-admin = "$(openssl rand -hex 16)"
 EOF
+  if grep -q '^\[access\.users\]' <<<"$access"; then
+    printf '%s\n' "$access" >>"$TGU_CONF"
+    ok "Вернула людей из бэкапа вместе с выключенными — ссылки прежние, если порт не сменился."
+  else
+    printf '[access.users]\nadmin = "%s"\n' "$(openssl rand -hex 16)" >>"$TGU_CONF"
+  fi
   chown "$TGU_USER:$TGU_USER" "$TGU_CONF"; chmod 640 "$TGU_CONF"
   mkdir -p "$(dirname "$TGU_ENV")"
   printf "TGU_PORT='%s'\nTGU_IP='%s'\n" "$port" "$ip" >"$TGU_ENV"
@@ -160,6 +228,7 @@ EOF
   for _ in $(seq 1 20); do tgu_api GET /users >/dev/null 2>&1 && { up=1; break; }; sleep 1; done
   [ "$up" = 1 ] || { err "telemt не запустился. Логи: journalctl -u kombain-telemt -n 30"; return 1; }
 
+  rm -f "$TGU_PENDING"
   fw_register tgusers "$port/tcp"
   if grep -q '^Status: active' <<<"$(ufw status 2>/dev/null)"; then fw_apply; fi
   ok "Telegram-прокси по именам работает на порту $port. Первый ключ — admin (твой)."
@@ -167,6 +236,10 @@ EOF
 
 tgu_remove_core() {
   tgu_installed || { warn "Не установлено."; return 0; }
+  if [ "${1:-}" != "--no-backup" ]; then
+    local f; f=$(tgu_backup) || { err "Не смогла сделать бэкап людей и ключей — удаление отменяю."; return 1; }
+    [ -n "$f" ] && ok "Бэкап людей и ключей: $f"
+  fi
   systemctl disable --now kombain-telemt >/dev/null 2>&1
   rm -f /etc/systemd/system/kombain-telemt.service; systemctl daemon-reload
   rm -rf /var/lib/kombain-telemt /var/lib/private/kombain-telemt "${KB_HOME:?}/tgusers"
@@ -233,7 +306,11 @@ tgu_cli() {
       # Для установщика (exe): поставить и выдать ссылку admin в том же виде, что tgproxy link
       ensure_pkgs jq qrencode >/dev/null 2>&1
       tgu_install_core >&2 || return 1
-      local tg; tg=$(tgu_link admin) && [ -n "$tg" ] || { err "Нет ссылки admin"; return 1; }
+      local tg; tg=$(tgu_link admin 2>/dev/null)
+      if [ -z "$tg" ]; then   # из бэкапа вернулись люди без admin — заводим admin заново
+        tgu_add admin >&2 && tg=$(tgu_link admin)
+      fi
+      [ -n "$tg" ] || { err "Нет ссылки admin"; return 1; }
       jq -nc --arg tg "$tg" --arg web "https://t.me/proxy?${tg#*\?}" \
         --arg qr "$(qrencode -t SVG -m 2 -o - "$tg" 2>/dev/null | base64 -w0)" '{tg:$tg, web:$web, qr:$qr}' ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -108,7 +109,7 @@ func TestSSHInstallerProtocol(t *testing.T) {
 		}
 	}()
 	fp := ""
-	client, err := connect(listener.Addr().String(), "root", "test-pass", func(s string) { fp = s })
+	client, err := connect(listener.Addr().String(), "root", "test-pass", func(s string) error { fp = s; return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +233,7 @@ func TestProxyErrorFinishes(t *testing.T) {
 			}()
 		}
 	}()
-	c, err := connect(l.Addr().String(), "root", "x", func(string) {})
+	c, err := connect(l.Addr().String(), "root", "x", func(string) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,5 +259,141 @@ func TestLoginHostWithPort(t *testing.T) {
 		if a.login(bad, "root", "x") == nil {
 			t.Fatalf("плохой адрес принят: %s", bad)
 		}
+	}
+}
+
+// Новый или подменённый сервер не получает пароль, пока человек не подтвердит ключ.
+func TestHostKeyPinning(t *testing.T) {
+	newServer := func(passSeen chan<- string) (string, func()) {
+		_, priv, _ := ed25519.GenerateKey(rand.Reader)
+		signer, _ := ssh.NewSignerFromKey(priv)
+		config := &ssh.ServerConfig{PasswordCallback: func(_ ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
+			passSeen <- string(p)
+			return nil, fmt.Errorf("stop here")
+		}}
+		config.AddHostKey(signer)
+		l, _ := net.Listen("tcp", "127.0.0.1:0")
+		go func() {
+			for {
+				conn, e := l.Accept()
+				if e != nil {
+					return
+				}
+				go func() { _, _, _, _ = ssh.NewServerConn(conn, config) }()
+			}
+		}()
+		return l.Addr().String(), func() { l.Close() }
+	}
+	wait := func(a *installer) Snapshot {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if s := a.snapshot(); s.Phase == "login" {
+				return s
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatal("login не закончился")
+		return Snapshot{}
+	}
+	seen := make(chan string, 10)
+	addr, stop := newServer(seen)
+	a := newInstaller()
+	a.known = newKnownHosts(t.TempDir() + "/kh.json")
+	defer a.close()
+
+	if err := a.login(addr, "root", "secret-pass"); err != nil {
+		t.Fatal(err)
+	}
+	if s := wait(a); s.ErrKind != "newhost" {
+		t.Fatalf("ждала newhost, а тут %q: %s", s.ErrKind, s.Error)
+	}
+	select {
+	case p := <-seen:
+		t.Fatalf("пароль ушёл на неподтверждённый сервер: %q", p)
+	default:
+	}
+	if err := a.trustHost(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.login(addr, "root", "secret-pass"); err != nil {
+		t.Fatal(err)
+	}
+	wait(a)
+	select {
+	case p := <-seen:
+		if p != "secret-pass" {
+			t.Fatal("не тот пароль")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("после подтверждения пароль должен уйти")
+	}
+	stop()
+
+	// тот же адрес, другой ключ — подмена: пароль не уходит
+	_, port, _ := net.SplitHostPort(addr)
+	seen2 := make(chan string, 10)
+	var addr2 string
+	for i := 0; i < 20; i++ {
+		_, priv, _ := ed25519.GenerateKey(rand.Reader)
+		signer, _ := ssh.NewSignerFromKey(priv)
+		config := &ssh.ServerConfig{PasswordCallback: func(_ ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
+			seen2 <- string(p)
+			return nil, fmt.Errorf("stop")
+		}}
+		config.AddHostKey(signer)
+		l, err := net.Listen("tcp", "127.0.0.1:"+port)
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		defer l.Close()
+		addr2 = l.Addr().String()
+		go func() {
+			for {
+				conn, e := l.Accept()
+				if e != nil {
+					return
+				}
+				go func() { _, _, _, _ = ssh.NewServerConn(conn, config) }()
+			}
+		}()
+		break
+	}
+	if addr2 == "" {
+		t.Skip("порт не освободился")
+	}
+	if err := a.login(addr2, "root", "secret-pass"); err != nil {
+		t.Fatal(err)
+	}
+	if s := wait(a); s.ErrKind != "hostchanged" {
+		t.Fatalf("ждала hostchanged, а тут %q", s.ErrKind)
+	}
+	select {
+	case p := <-seen2:
+		t.Fatalf("пароль ушёл на подменённый сервер: %q", p)
+	default:
+	}
+}
+
+// Файл с отпечатками не записался — человек узнаёт об этом, в этом окне войти всё равно можно.
+func TestKnownHostsWriteFailure(t *testing.T) {
+	dir := t.TempDir()
+	blocker := dir + "/file"
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	k := newKnownHosts(blocker + "/sub/kh.json") // каталог внутри файла создать нельзя
+	if err := k.set("1.2.3.4:22", "SHA256:abc"); err == nil {
+		t.Fatal("ошибка записи проглочена")
+	}
+	if k.get("1.2.3.4:22") != "SHA256:abc" {
+		t.Fatal("в памяти должно остаться")
+	}
+	ok := newKnownHosts(dir + "/kh.json")
+	if err := ok.set("1.2.3.4:22", "SHA256:abc"); err != nil {
+		t.Fatal(err)
+	}
+	if newKnownHosts(dir+"/kh.json").get("1.2.3.4:22") != "SHA256:abc" {
+		t.Fatal("не сохранилось между запусками")
 	}
 }
