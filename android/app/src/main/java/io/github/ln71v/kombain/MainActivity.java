@@ -40,6 +40,8 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         // Пока идёт установка, экран не гаснет: иначе телефон может усыпить программу.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // Отпечатки серверов — в личной папке приложения: при следующем входе сверим ключ сервера.
+        Kbcore.setDataDir(getFilesDir().getAbsolutePath());
 
         web = new WebView(this);
         web.setBackgroundColor(0xFFFBFAF7);

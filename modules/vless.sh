@@ -187,9 +187,16 @@ vls_go_behind() {
   vls_installed || return 0
   vls_load_env
   [ "$VLS_MODE" = "behind" ] && return 0
+  [ -z "$(port_owner "$VLS_INNER" tcp)" ] \
+    || { err "Порт $VLS_INNER занят: $(port_owner "$VLS_INNER" tcp) — VLESS увести за движок некуда, ничего не трогала."; return 1; }
   step "Переношу VLESS за движок: 443 займёт nginx"
-  VLS_MODE=behind; vls_save_env
-  vls_write_conf && vls_restart || return 1
+  VLS_MODE=behind
+  if ! { vls_write_conf && vls_restart; }; then
+    VLS_MODE=direct   # Xray вернулся на 443 (vls_restart откатил конфиг) — режим в файле не трогаем
+    err "Xray не перешёл на 127.0.0.1:$VLS_INNER — VLESS остался на 443 как был."
+    return 1
+  fi
+  vls_save_env
   mkdir -p "$KB_HOME/aiproxy/nginx/sni.d"
   printf '# VLESS Reality — генерирует Комбайн\n%s 127.0.0.1:%s;\n' "$VLS_SNI" "$VLS_INNER" \
     >"$KB_HOME/aiproxy/nginx/sni.d/$VLS_MAP_NAME"
@@ -202,10 +209,18 @@ vls_go_direct() {
   vls_load_env
   [ "$VLS_MODE" = "behind" ] || return 0
   [ "$(vls_port443)" = "our-nginx" ] && return 0   # движок живой — всё правильно
+  # nginx только что убили — ядро может ещё пару секунд держать 443
+  local _w
+  for _w in 1 2 3 4 5 6 7 8 9 10; do [ "$(port_owner 443 tcp)" = "nginx" ] || break; sleep 0.5; done
   [ -z "$(port_owner 443 tcp)" ] || { err "443 занят программой «$(port_owner 443 tcp)» — VLESS вернуть некуда."; return 1; }
   step "Возвращаю VLESS на 443: движка нет"
-  VLS_MODE=direct; vls_save_env
-  vls_write_conf && vls_restart || return 1
+  VLS_MODE=direct
+  if ! { vls_write_conf && vls_restart; }; then
+    VLS_MODE=behind   # не вышло — режим не меняем, следующий go-direct попробует снова
+    err "Xray не перезапустился на 443 — режим оставила прежним, повтори после исправления."
+    return 1
+  fi
+  vls_save_env
   rm -f "${KB_HOME:?}/aiproxy/nginx/sni.d/$VLS_MAP_NAME"
   ok "VLESS снова сам на 443"
 }

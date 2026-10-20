@@ -48,7 +48,7 @@ type Snapshot struct {
 	ProxyTG     string `json:"proxyTG"`
 	ProxyWeb    string `json:"proxyWeb"`
 	ProxyQR     string `json:"proxyQR"`
-	ErrKind     string `json:"errKind"` // "noconnect" — до сервера не достучаться (порт 22)
+	ErrKind     string `json:"errKind"` // "noconnect" — нет связи (порт 22); "newhost"/"hostchanged" — ключ сервера не подтверждён
 }
 
 type installer struct {
@@ -58,9 +58,14 @@ type installer struct {
 	busy       bool
 	closed     bool
 	generation uint64
+	known      *knownHosts
+	pendHost   string // сервер с неподтверждённым ключом — ждёт кнопки «Да, это мой сервер»
+	pendFP     string
 }
 
-func newInstaller() *installer          { return &installer{state: Snapshot{Phase: "login"}} }
+func newInstaller() *installer {
+	return &installer{state: Snapshot{Phase: "login"}, known: newKnownHosts(knownHostsPath())}
+}
 func (a *installer) snapshot() Snapshot { a.mu.Lock(); defer a.mu.Unlock(); return a.state }
 func (a *installer) close() {
 	a.mu.Lock()
@@ -107,7 +112,7 @@ func (a *installer) login(host, user, pass string) error {
 		}
 		host = net.JoinHostPort(h, port)
 	} else if net.ParseIP(strings.Trim(host, "[]")) != nil {
-		host = strings.Trim(host, "[]")
+		host = net.JoinHostPort(strings.Trim(host, "[]"), "22")
 	} else {
 		return errors.New("Введи IP сервера, который прислал хостер.")
 	}
@@ -130,8 +135,39 @@ func (a *installer) login(host, user, pass string) error {
 		_ = old.Close()
 	}
 	go func() {
-		c, err := connect(host, user, pass, func(fp string) { a.update(g, func(s *Snapshot) { s.Fingerprint = fp }) })
+		var hk *hostKeyErr
+		c, err := connect(host, user, pass, func(fp string) error {
+			a.update(g, func(s *Snapshot) { s.Fingerprint = fp })
+			switch saved := a.known.get(host); saved {
+			case fp:
+				return nil
+			case "":
+				hk = &hostKeyErr{kind: "newhost", fp: fp}
+			default:
+				hk = &hostKeyErr{kind: "hostchanged", fp: fp}
+			}
+			return hk // обрыв до входа: пароль не уходит
+		})
 		pass = "" // Пароль не сохраняется в состоянии, файлах или журнале.
+		if err != nil && hk != nil {
+			a.mu.Lock()
+			if !a.closed && a.generation == g {
+				a.pendHost, a.pendFP = host, hk.fp
+			}
+			a.mu.Unlock()
+			msg := "Первый вход на этот сервер. Пароль ещё НЕ отправлен.\n" +
+				"Отпечаток сервера: " + hk.fp + "\n" +
+				"Если это твой свежий сервер от хостера — жми «Да, это мой сервер». Дальше буду сверять сама."
+			if hk.kind == "hostchanged" {
+				msg = "⚠️ Ключ сервера изменился с прошлого раза. Пароль НЕ отправлен.\n" +
+					"Так бывает, если ты переустановил сервер у хостера. Если не переустанавливал — кто-то может " +
+					"подменять связь: не входи, раздай интернет с телефона и попробуй снова.\n" +
+					"Новый отпечаток: " + hk.fp
+			}
+			a.update(g, func(s *Snapshot) { s.ErrKind = hk.kind })
+			a.finish(g, "login", msg)
+			return
+		}
 		if err != nil {
 			var nerr net.Error
 			msg := "Не получилось зайти на сервер. Проверь параметры SSH и попробуй ещё раз."
@@ -167,7 +203,28 @@ func (a *installer) login(host, user, pass string) error {
 	return nil
 }
 
-func connect(host, user, pass string, fingerprint func(string)) (*ssh.Client, error) {
+// trustHost — человек подтвердил ключ сервера: запомнить его и пускать дальше.
+func (a *installer) trustHost() error {
+	a.mu.Lock()
+	host, fp := a.pendHost, a.pendFP
+	a.pendHost, a.pendFP = "", ""
+	busy := a.busy
+	if !busy && host != "" {
+		a.state.Error, a.state.ErrKind = "", ""
+	}
+	a.mu.Unlock()
+	if busy {
+		return errors.New("Подожди, выполняю предыдущий шаг.")
+	}
+	if host == "" || fp == "" {
+		return errors.New("Нечего подтверждать — нажми «Войти» ещё раз.")
+	}
+	return a.known.set(host, fp)
+}
+
+// connect — check решает по отпечатку ключа, можно ли входить (nil — можно).
+// Проверка идёт до входа, поэтому на неподтверждённый сервер пароль не уходит.
+func connect(host, user, pass string, check func(fp string) error) (*ssh.Client, error) {
 	if _, _, err := net.SplitHostPort(host); err != nil {
 		host = net.JoinHostPort(host, "22")
 	}
@@ -183,8 +240,7 @@ func connect(host, user, pass string, fingerprint func(string)) (*ssh.Client, er
 				return ans, nil
 			}),
 		},
-		// Как в исходнике: принять ключ и показать SHA256 пользователю.
-		HostKeyCallback: func(_ string, _ net.Addr, k ssh.PublicKey) error { fingerprint(ssh.FingerprintSHA256(k)); return nil },
+		HostKeyCallback: func(_ string, _ net.Addr, k ssh.PublicKey) error { return check(ssh.FingerprintSHA256(k)) },
 		Timeout:         20 * time.Second,
 	}
 	// Тот же SSH-протокол; deadline ограничивает также зависшее рукопожатие.

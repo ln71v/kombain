@@ -39,3 +39,23 @@ func TestBridge(t *testing.T) {
 		t.Fatal("ждала ошибку на неизвестную команду")
 	}
 }
+
+// Отпечатки пишутся в папку приложения, подтверждать нечего — понятная ошибка.
+func TestDataDirAndTrust(t *testing.T) {
+	defer Close()
+	dir := t.TempDir()
+	SetDataDir(dir)
+	if got := knownHostsPath(); got != dir+"/known_hosts.json" {
+		t.Fatalf("путь: %s", got)
+	}
+	if r := call(t, "trustHost"); r.Error == "" {
+		t.Fatal("без входа подтверждать нечего — ждала ошибку")
+	}
+	if err := current().known.set("1.2.3.4:22", "SHA256:x"); err != nil {
+		t.Fatalf("в папку приложения не записалось: %v", err)
+	}
+	Close()
+	if current().known.get("1.2.3.4:22") != "SHA256:x" {
+		t.Fatal("после перезапуска отпечаток забыт")
+	}
+}

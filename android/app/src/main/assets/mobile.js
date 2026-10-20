@@ -13,7 +13,7 @@
       }, 0);
     });
   }
-  ['loginServer', 'installBot', 'installerState', 'retryOwner', 'installProxy',
+  ['loginServer', 'trustHost', 'installBot', 'installerState', 'retryOwner', 'installProxy',
     'needLogin', 'openProxy', 'appVersion', 'closeWindow'].forEach(function (n) {
     window[n] = function () { return call(n, Array.prototype.slice.call(arguments).map(String)); };
   });
