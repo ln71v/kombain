@@ -64,7 +64,7 @@ type installer struct {
 }
 
 func newInstaller() *installer {
-	return &installer{state: Snapshot{Phase: "login"}, known: newKnownHosts(defaultKnownHostsPath())}
+	return &installer{state: Snapshot{Phase: "login"}, known: newKnownHosts(knownHostsPath())}
 }
 func (a *installer) snapshot() Snapshot { a.mu.Lock(); defer a.mu.Unlock(); return a.state }
 func (a *installer) close() {
