@@ -84,7 +84,7 @@
 
 ## VLESS Reality (v0.5.0)
 - Xray без панели, свой бинарник /usr/local/lib/kombain/xray (версия зашита, сумма сверяется с .dgst релиза), служба kombain-xray.
-- Маска по умолчанию www.yahoo.com, домен не нужен. flow xtls-rprx-vision, fp chrome. Клиенты в $KB_HOME/vless/clients.json.
+- Маска по умолчанию www.yahoo.com, домен не нужен. flow xtls-rprx-vision, fp firefox (с 0.14.8; chrome даёт двухпакетное приветствие Reality, из дома к Германии глохнет — см. claude/germany-fp-firefox.txt в проекте). Свой — VLS_FP=… в $KB_HOME/vless/env. Клиенты в $KB_HOME/vless/clients.json.
 - 443 свободен — Xray сам на 443; занят движком — Xray на 127.0.0.1:8444 + строка в карте SNI. Чужой xray на 443 не трогаем — просим убрать.
 - Блок: Xray не пускает клиентов в локальные сети сервера (127.0.0.1, 10.x и т.д.).
 - Бот: «🔑 VLESS» — установить, добавить устройство (QR + ссылка), ключ, состояние, удалить.

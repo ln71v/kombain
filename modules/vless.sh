@@ -21,6 +21,10 @@ VLS_UNIT="/etc/systemd/system/kombain-xray.service"
 VLS_INNER=8444
 VLS_MAP_NAME="20-vless.map"
 VLS_SNI_DEFAULT="www.yahoo.com"
+# Отпечаток TLS для клиента (fp в ссылке). firefox: у chrome приветствие Reality ~1780 байт, уходит двумя пакетами,
+# и из дома (Seven Sky) к Германии такие соединения глохнут; firefox — ~660 байт, один пакет (20.10.2026, tcpdump).
+# Свой можно задать в $VLS_ENV строкой VLS_FP=chrome (берём только известные значения).
+VLS_FP_DEFAULT="firefox"
 
 # Сайт-заглушка для своего домена
 VLS_CADDY_VER="v2.10.2"
@@ -513,12 +517,14 @@ vls_valid_client() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]; }
 vls_clients() { jq -r '.[].name' "$VLS_DIR/clients.json" 2>/dev/null; }
 
 vls_link() {
-  local name="$1" id
+  local name="$1" id fp
   vls_load_env
   id=$(jq -r --arg n "$name" '.[] | select(.name==$n) | .id' "$VLS_DIR/clients.json")
   [ -n "$id" ] || return 1
-  printf 'vless://%s@%s:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s' \
-    "$id" "$VLS_ENDPOINT" "$VLS_SNI" "$VLS_PUB" "$VLS_SID" "$name"
+  fp="${VLS_FP:-$VLS_FP_DEFAULT}"
+  case "$fp" in firefox|chrome|safari|ios|android|edge|360|qq|random|randomized) ;; *) fp="$VLS_FP_DEFAULT" ;; esac
+  printf 'vless://%s@%s:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=%s&pbk=%s&sid=%s&type=tcp#%s' \
+    "$id" "$VLS_ENDPOINT" "$VLS_SNI" "$fp" "$VLS_PUB" "$VLS_SID" "$name"
 }
 
 vls_add_client() {
