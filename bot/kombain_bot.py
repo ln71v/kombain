@@ -29,7 +29,8 @@ TOKEN = os.environ["BOT_TOKEN"]
 ADMIN = int(os.environ.get("ADMIN_ID") or 0)
 CLAIM_CODE = os.environ.get("CLAIM_CODE", "").strip()
 BOT_ENV = "/opt/kombain/bot/env"
-claim_fails = {}         # кто сколько раз ошибся кодом
+claim_fails = {}         # кто когда ошибся кодом: uid -> [время, ...] (считаем только за последние 10 минут)
+CLAIM_WINDOW = 600
 KB_SRC = os.environ.get("KB_SRC", "/opt/kombain/src")
 KB = os.path.join(KB_SRC, "kombain.sh")
 LOG_DIR = "/opt/kombain/logs"
@@ -1760,7 +1761,17 @@ def claim(m):
     global ADMIN
     uid, chat = m["from"]["id"], m["chat"]["id"]
     text = (m.get("text") or "").strip()
-    if not CLAIM_CODE or claim_fails.get(uid, 0) >= 5 or sum(claim_fails.values()) >= 50:
+    if not CLAIM_CODE:
+        return
+    # Перебор кода тормозим окном в 10 минут: 5 ошибок на человека, 50 на всех.
+    # Окно само проходит — посторонний не может навсегда закрыть привязку хозяину.
+    now = time.time()
+    for k in list(claim_fails):
+        claim_fails[k] = [t for t in claim_fails[k] if now - t < CLAIM_WINDOW]
+        if not claim_fails[k]:
+            del claim_fails[k]
+    if len(claim_fails.get(uid, [])) >= 5 or sum(map(len, claim_fails.values())) >= 50:
+        send(chat, "⏳ Слишком много неверных кодов. Подожди 10 минут и пришли код ещё раз.")
         return
     if text == CLAIM_CODE:
         with open(BOT_ENV) as f:
@@ -1774,7 +1785,7 @@ def claim(m):
                    "Окно установщика на компе можно закрывать. Дальше всё здесь 👇", MAIN_KB)
         return
     if text.isdigit():
-        claim_fails[uid] = claim_fails.get(uid, 0) + 1
+        claim_fails.setdefault(uid, []).append(now)
         send(chat, "❌ Не тот код. Посмотри в окне установщика.")
     else:
         send(chat, "👋 Пришли код из окна установщика — 6 цифр.")
@@ -1806,6 +1817,10 @@ def main():
                 continue
             if (src.get("from") or {}).get("id") != ADMIN:
                 continue   # чужим не отвечаем
+            # Только личный чат: в группе ключи и ссылки увидели бы все её участники
+            where = (src.get("message") or {}).get("chat") if "callback_query" in u else src.get("chat")
+            if (where or {}).get("type") != "private":
+                continue
             # Сервер фиксируется на всю обработку: фоновая операция (например «Оставить сервер»)
             # может сменить выбор, но уже начатое нажатие доделается там, где его проверили.
             _tl.target = TARGET

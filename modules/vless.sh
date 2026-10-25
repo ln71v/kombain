@@ -204,6 +204,13 @@ vls_go_behind() {
   mkdir -p "$KB_HOME/aiproxy/nginx/sni.d"
   printf '# VLESS Reality — генерирует Комбайн\n%s 127.0.0.1:%s;\n' "$VLS_SNI" "$VLS_INNER" \
     >"$KB_HOME/aiproxy/nginx/sni.d/$VLS_MAP_NAME"
+  # WEB-прокси Telegram (tg.<домен>) тоже входит через VLESS — без своей строки движок его отбросит
+  local tgh
+  tgh=$(sed -n 's/.*"public_hostname"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/tproxy-server/config.json 2>/dev/null)
+  if [ -f "$VLS_SITE/tgweb.caddy" ] && [ -n "$tgh" ]; then
+    printf '# Telegram WEB-прокси — генерирует Комбайн\n%s 127.0.0.1:%s;\n' "$tgh" "$VLS_INNER" \
+      >"$KB_HOME/aiproxy/nginx/sni.d/25-tgweb.map"
+  fi
   ok "VLESS теперь внутри, на 127.0.0.1:$VLS_INNER"
 }
 
@@ -225,7 +232,7 @@ vls_go_direct() {
     return 1
   fi
   vls_save_env
-  rm -f "${KB_HOME:?}/aiproxy/nginx/sni.d/$VLS_MAP_NAME"
+  rm -f "${KB_HOME:?}/aiproxy/nginx/sni.d/$VLS_MAP_NAME" "${KB_HOME:?}/aiproxy/nginx/sni.d/25-tgweb.map"
   ok "VLESS снова сам на 443"
 }
 
