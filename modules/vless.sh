@@ -340,11 +340,30 @@ vls_cert() {
   systemctl enable --now certbot.timer >/dev/null 2>&1 || true
 }
 
+# Страница — нетронутый шаблон Комбайна? Сравниваем, заменив название, даты и год на метки.
+vls_page_untouched() {
+  local f="$1" t norm_page norm_tpl
+  t=$(sed -n 's|.*<title>\(.*\)</title>.*|\1|p' "$f" | head -1)
+  [ -n "$t" ] || return 1
+  norm_page=$(sed -e "s|$(printf '%s' "$t" | sed 's/[][\.*^$|/]/\\&/g')|@T@|g" \
+                  -e 's|[0-9]\{2\}\.[0-9]\{2\}\.[0-9]\{4\}|@D@|g' -e 's|© [0-9]\{4\}|© @Y@|' "$f")
+  norm_tpl=$(sed -e 's|{{TITLE}}|@T@|g' -e 's|{{D[123]}}|@D@|g' -e 's|{{YEAR}}|@Y@|' "$KB_SRC/data/site/index.html")
+  [ "$norm_page" = "$norm_tpl" ]
+}
+
 vls_site_write() {
   local host="$1" title
   title="${host%%.*}"; title="${title^}"
   install -d -m 0755 "$VLS_SITE" "$VLS_SITE/www"
-  if [ ! -f "$VLS_SITE/www/index.html" ]; then   # свою страницу не перетираем
+  # Свою (правленую руками) страницу не перетираем. Нетронутую шаблонную под другим доменом — пересобираем,
+  # иначе после смены домена на сайте остаётся старое название.
+  if [ -f "$VLS_SITE/www/index.html" ] && vls_page_untouched "$VLS_SITE/www/index.html" \
+     && ! grep -qF "<title>$title</title>" "$VLS_SITE/www/index.html"; then
+    cp -a "$VLS_SITE/www/index.html" "$VLS_SITE/index.html.bak-$(date +%F-%H%M)"   # не в www — не на сайт
+    rm -f "$VLS_SITE/www/index.html"
+    say "Страница-заглушка была под другим доменом — пересобираю с названием «$title» (копия: $VLS_SITE/index.html.bak-…)"
+  fi
+  if [ ! -f "$VLS_SITE/www/index.html" ]; then
     local d1 d2 d3
     d1=$(date -d "-$((9 + RANDOM % 20)) days" +%d.%m.%Y); d2=$(date -d "-$((40 + RANDOM % 30)) days" +%d.%m.%Y)
     d3=$(date -d "-$((90 + RANDOM % 60)) days" +%d.%m.%Y)
@@ -439,6 +458,11 @@ vls_domain_on() {
   [ -n "${VLS_TARGET:-}" ] && VLS_SITE_PORT="${VLS_TARGET##*:}"
   vls_cert_hook
   if [ "${VLS_DOMAIN:-}" = "$host" ] && vls_running && vls_site_check "$host" "$VLS_SITE_PORT"; then
+    # страница осталась от прошлого домена — пересобрать (ключи не меняются)
+    local t0="${host%%.*}"; t0="${t0^}"
+    if vls_page_untouched "$VLS_SITE/www/index.html" && ! grep -qF "<title>$t0</title>" "$VLS_SITE/www/index.html"; then
+      vls_site_reload || return 1
+    fi
     ok "VLESS уже работает на своём домене $host"; return 0
   fi
   if grep -qiE "^\.?${host//./\\.}$" "$KB_SRC/data/ai-domains.txt" 2>/dev/null; then
