@@ -810,7 +810,7 @@ def server_screen(chat):
             out = "Сервер не ответил за 40 секунд."
         send_pre(chat, out, "📊 <b>Сервер</b>",
                  inline([btn("🔄 Обновить Комбайн там", f"srv:upd:{t['ip']}")],
-                        [btn(f"🗂 Мои серверы ({n})", "srv:list"), btn("🏠 К стенду", "srv:local")]))
+                        [btn(f"🗂 Мои серверы ({n})", "srv:list"), btn("🏠 К своему серверу", "srv:local")]))
         return
     out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=30).stdout
     send_pre(chat, out, f"📊 <b>Сервер</b> · Комбайн {VERSION}",
