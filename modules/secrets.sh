@@ -133,6 +133,23 @@ sec_cli() {
       d=$(printf '%s' "$d" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#\.$##; s#^dns\.##')
       [[ "$d" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]] || { err "Это не похоже на домен. Пример: mojdns.site"; return 1; }
       sec_domain_save "$d" && ok "Домен $d в сейфе" ;;
+    clear-domain)
+      # Убрать домен и ключ Cloudflare (ключ сделан под зону этого домена — без него не нужен).
+      # Не даём, пока домен в работе: VLESS на своём домене, нейронки, WEB-прокси.
+      local d; d=$(sec_domain)
+      [ -n "$d" ] || { ok "Домена в сейфе и так нет"; return 0; }
+      if [ -r "$KB_HOME/vless/env" ] && grep -qx "VLS_DOMAIN='$d'" "$KB_HOME/vless/env"; then
+        err "На $d сейчас работает 🔑 VLESS. Сначала верни ему чужую маску (🔑 VLESS → «↩️ Вернуть чужую маску»)."; return 1
+      fi
+      if declare -F tgw_installed >/dev/null && tgw_installed; then
+        err "На домене работает Telegram WEB-прокси. Сначала убери его (✈️ Telegram → 🌐 WEB-ссылка)."; return 1
+      fi
+      if declare -F aip_installed >/dev/null && aip_installed; then
+        err "На домене работают 🧠 Нейронки. Домен из сейфа убирать нельзя, пока они стоят."; return 1
+      fi
+      backup_file "$KB_DOMAIN_FILE"; backup_file "$KB_CF_FILE"
+      rm -f "$KB_DOMAIN_FILE" "$KB_CF_FILE"
+      ok "Домен $d и ключ Cloudflare убраны из сейфа (копия в $KB_BACKUP). В Cloudflare ничего не трогала." ;;
     set-client)
       local c; c=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z' | tr -d ' ')
       [[ "$c" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { err "Только маленькие латинские буквы, цифры и дефис. Пример: my-phone"; return 1; }
