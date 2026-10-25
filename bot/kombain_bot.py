@@ -349,6 +349,8 @@ def safe_screen(chat):
                             (client, btn("Сменить название", "safe:put:client"))) if ok]
     if swap:
         rows.append(swap)
+    if domain:
+        rows.append([btn("🗑 Убрать домен из сейфа", "safe:clr")])
     send(chat, text, {"inline_keyboard": rows} if rows else None)
 
 
@@ -541,6 +543,17 @@ def safe_callback(chat, data):
         make_records(chat, force=True) and safe_screen(chat)
     elif data == "safe:go":
         safe_go(chat)
+    elif data == "safe:clr":
+        d = sec_info().get("domain") or ""
+        send(chat, f"🗑 Убрать из сейфа домен <code>{esc(d)}</code> и ключ Cloudflare к нему?\n\n"
+                   "Нужно, когда домен ушёл на другой сервер. В самом Cloudflare ничего не удалю. "
+                   "Если на домене что-то работает (VLESS, нейронки, WEB-прокси) — не дам и скажу, что сначала снять.",
+             inline([btn("Да, убрать", "safe:clrok")], TO_SAFE))
+    elif data == "safe:clrok":
+        code, out = kb("secrets", "clear-domain", timeout=30)
+        records_ok.clear()
+        send_pre(chat, out, "🗑 Готово" if code == 0 else "❌ Не убрала:")
+        safe_screen(chat)
 
 
 # ───────────────────────── AmneziaWG ─────────────────────────
