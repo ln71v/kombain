@@ -1,11 +1,25 @@
-/* Подгонка окна установщика (720x520) под экран телефона. Сам интерфейс — starter/ui/index.html. */
+/* Подгонка окна установщика (720x520) под экран телефона. Сам интерфейс — starter/ui/index.html.
+   Экран: шапка сверху, середина прокручивается, кнопки всегда прибиты к низу. Шрифт не уменьшаем — текст переносится. */
 html,body{width:100%!important;height:100%!important;overflow:hidden!important}
-.screen>div{width:100vw!important;height:100vh!important;height:100dvh!important;border:0!important;border-radius:0!important}
-.screen>div>div:first-child{padding:0 16px!important}
-.content{padding:20px 16px 0!important;gap:12px!important}
+.screen>div{width:100vw!important;height:100vh!important;height:100dvh!important;border:0!important;border-radius:0!important;display:flex!important;flex-direction:column!important}
+.screen>div>div:first-child{padding:0 16px!important;flex-shrink:0!important}
+
+/* Середина: занимает всё между шапкой и кнопками, лишнее — прокрутка, а не уезжающие кнопки. */
+.screen>div>div:nth-child(2){flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch;padding-left:16px!important;padding-right:16px!important;padding-bottom:16px!important;box-sizing:border-box!important}
+.content{padding:20px 16px 16px!important;gap:12px!important}
 .content h1{font-size:21px!important}
-.footer{height:auto!important;min-height:72px;padding:12px 16px!important;flex-wrap:wrap;gap:10px;box-sizing:border-box}
-.footer>span{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
+
+/* Низ с кнопками: всегда виден. «Назад» и главная кнопка — в одну строку, длинная доп. кнопка — отдельной строкой. */
+.screen>div>div:nth-child(3){flex-shrink:0!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:10px!important;height:auto!important;min-height:0!important;padding:12px 16px calc(12px + env(safe-area-inset-bottom))!important;box-sizing:border-box!important;border-top:1px solid #E4E1DA;background:#FBFAF7}
+.screen>div>div:nth-child(3)>span:not(.caption),.screen>div>div:nth-child(3)>div{display:contents!important}
+.screen>div>div:nth-child(3) button{flex:1 1 auto;min-width:0;height:auto!important;min-height:48px;white-space:nowrap;padding:10px 16px!important}
+.screen>div>div:nth-child(3) button.secondary:not([data-go]):not(#tg-back),#skip-bot{order:3;flex-basis:100%!important;white-space:normal!important}
+.screen>div>div:nth-child(3) .caption{flex:1 1 100%}
+
+/* Кнопки-карточки посередине (выбор нейронки и т.п.): во всю ширину, текст переносится. */
+.screen>div>div:nth-child(2) button{white-space:normal!important;max-width:100%!important;box-sizing:border-box!important;overflow-wrap:anywhere}
+.screen>div>div:nth-child(2) [style*="grid-template-columns"]{grid-template-columns:1fr!important}
+
 .primary,.secondary{padding:0 16px!important}
 .fields{grid-template-columns:1fr!important}
 #tg-ready>div{flex-direction:column!important;align-items:flex-start!important}
@@ -15,9 +29,4 @@ pre{height:140px}
 .kb-col{flex-direction:column!important}
 .kb-col>*{width:auto!important;max-width:100%!important}
 #bot-name{text-decoration:underline;color:#0E6B5C}
-/* Середина экрана — узкие поля; низ с кнопками — переносится на новую строку, а не сжимается. */
-.screen>div>div:nth-child(2){padding-left:16px!important;padding-right:16px!important}
-.screen>div>div:last-child{flex-wrap:wrap!important;gap:10px!important;height:auto!important;min-height:72px;padding:12px 16px!important;box-sizing:border-box!important}
-.screen>div>div:last-child>span,.screen>div>div:last-child>div{display:flex;flex-wrap:wrap!important;gap:10px!important;justify-content:flex-end}
-.screen button{white-space:nowrap}
 #tg-ready label{margin-top:6px}
