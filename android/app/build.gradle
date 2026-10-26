@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId 'io.github.ln71v.kombain'
-        minSdk 26
+        minSdk 29
         targetSdk 34
         versionCode kbCode
         versionName kbVersion
