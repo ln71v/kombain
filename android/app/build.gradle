@@ -18,6 +18,8 @@ android {
         targetSdk 34
         versionCode kbCode
         versionName kbVersion
+        // Канал обновлений: test — сборки из ветки android (android-test), release — релизы.
+        resValue 'string', 'kb_channel', (System.getenv('KB_CHANNEL') ?: 'release')
     }
 
     signingConfigs {

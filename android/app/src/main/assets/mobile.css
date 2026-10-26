@@ -30,3 +30,24 @@ pre{height:140px}
 .kb-col>*{width:auto!important;max-width:100%!important}
 #bot-name{text-decoration:underline;color:#0E6B5C}
 #tg-ready label{margin-top:6px}
+
+/* Код привязки: шесть клеток всегда в один ряд, ширина — по экрану. */
+#digits{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:6px!important;width:100%!important;max-width:360px!important;flex-wrap:nowrap!important}
+#digits>span{width:auto!important;height:58px!important;box-sizing:border-box!important;font-size:26px!important;min-width:0!important}
+#screen-11 [style*="padding: 0 40px"]{padding:0!important}
+
+/* Шпаргалка BotFather: картинки друг под другом, текст покрупнее. */
+.bf-pics{grid-template-columns:1fr!important;gap:12px!important}
+.tgc{font-size:13px!important}.tgc .cap{font-size:14px!important;padding:8px 10px!important}
+.tgc .top{padding:8px 10px!important}.tgc .chat{padding:8px!important;gap:6px!important}
+.tgc .l,.tgc .r{padding:6px 9px!important}.tgc .bar{padding:8px 10px!important}
+.tgc .snd{width:30px!important;height:30px!important;border-radius:15px!important;font-size:14px!important}
+.bf-steps li{font-size:15px!important}
+
+/* Кнопка «Вставить» — под палец. */
+.paste-btn{height:36px!important;padding:0 14px!important;font-size:14px!important}
+
+/* Плашка «есть новая версия». */
+#kb-update{margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#E3F1EC;color:#0A4F44;font-size:14px;line-height:1.45;display:flex;flex-direction:column;gap:8px}
+#kb-update button{align-self:flex-start;min-height:44px}
+#kb-update small{color:#5A6470;font-size:12px;line-height:1.4}

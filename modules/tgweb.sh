@@ -234,7 +234,7 @@ tgw_install_core() {
   tgw_site_snippet "$host"
   if ! vls_site_reload; then
     rm -f "$VLS_SITE/$TGW_SNIPPET_NAME".{caddy,cred}; vls_site_reload >/dev/null 2>&1
-    err "Сайт не принял WEB-прокси — убрала, VLESS работает как раньше."; return 1
+    err "Сайт не принял WEB-прокси — убрал, VLESS работает как раньше."; return 1
   fi
   if [ "$VLS_MODE" = "behind" ] && [ -d "$KB_HOME/aiproxy/nginx/sni.d" ]; then
     printf '# Telegram WEB-прокси — генерирует Комбайн\n%s 127.0.0.1:%s;\n' "$host" "$VLS_INNER" \
@@ -279,7 +279,7 @@ tgw_remove_core() {
   vls_installed && vls_site_reload >/dev/null 2>&1
   rm -rf "${TGW_CONF:?}" /etc/mtproxy /opt/MTProxy "${TGW_SRC:?}" /srv/tproxy-site
   rm -f /usr/local/bin/tproxy-server /usr/local/sbin/refresh-mtproxy-config
-  ok "WEB-прокси удалён${h:+ ($h)}. Сертификат и запись в Cloudflare оставила."
+  ok "WEB-прокси удалён${h:+ ($h)}. Сертификат и запись в Cloudflare оставил."
 }
 
 # kombain cli tgweb <команда>

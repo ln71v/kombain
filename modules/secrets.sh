@@ -67,7 +67,7 @@ sec_cf_records() {
     if [ "$n" -eq 0 ]; then
       sec_cf_api POST "/zones/$zone/dns_records" "$(jq -c --arg n "$name" '. + {name:$n}' <<<"$body")" \
         | jq -e '.success' >/dev/null || { err "Не получилось создать $name"; return 1; }
-      ok "Создала запись $name → $ip"
+      ok "Создал запись $name → $ip"
       continue
     fi
     id=$(jq -r '.result[0].id' <<<"$recs"); typ=$(jq -r '.result[0].type' <<<"$recs")
@@ -85,7 +85,7 @@ sec_cf_records() {
     [ "$n" -eq 1 ] || { err "У $name несколько записей — разберись руками в Cloudflare"; return 1; }
     sec_cf_api PUT "/zones/$zone/dns_records/$id" "$(jq -c --arg n "$name" '. + {name:$n}' <<<"$body")" \
       | jq -e '.success' >/dev/null || { err "Не получилось перезаписать $name"; return 1; }
-    ok "Перезаписала $name: было $cur, стало $ip"
+    ok "Перезаписал $name: было $cur, стало $ip"
   done
   [ "$busy" -eq 1 ] && return 3
   return 0
@@ -149,7 +149,7 @@ sec_cli() {
       fi
       backup_file "$KB_DOMAIN_FILE"; backup_file "$KB_CF_FILE"
       rm -f "$KB_DOMAIN_FILE" "$KB_CF_FILE"
-      ok "Домен $d и ключ Cloudflare убраны из сейфа (копия в $KB_BACKUP). В Cloudflare ничего не трогала." ;;
+      ok "Домен $d и ключ Cloudflare убраны из сейфа (копия в $KB_BACKUP). В Cloudflare ничего не трогал." ;;
     set-client)
       local c; c=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z' | tr -d ' ')
       [[ "$c" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { err "Только маленькие латинские буквы, цифры и дефис. Пример: my-phone"; return 1; }

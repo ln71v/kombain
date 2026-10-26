@@ -91,7 +91,7 @@ awg_add_repo() {
   fi
 
   c=$( . /etc/os-release 2>/dev/null; echo "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}" )
-  [ -n "$c" ] || { err "Не поняла, какая версия Ubuntu (нет VERSION_CODENAME в /etc/os-release)."; return 1; }
+  [ -n "$c" ] || { err "Не понял, какая версия Ubuntu (нет VERSION_CODENAME в /etc/os-release)."; return 1; }
 
   tmp=$(mktemp -d)
   if awg_fetch_key >"$tmp/key.asc" && awg_key_ok "$tmp/key.asc"; then
@@ -221,7 +221,7 @@ awg_install_core() {
   [ -n "$owner" ] && { err "Порт $AWG_PORT/udp уже занят: $owner"; return 1; }
   ip link show "$AWG_IF" >/dev/null 2>&1 && { err "Интерфейс $AWG_IF уже есть — его поднял кто-то другой."; return 1; }
   grep -q "inet $AWG_NET\." <<<"$(ip -4 addr)" && { err "Подсеть $AWG_NET.0/24 уже занята на сервере."; return 1; }
-  wan=$(awg_wan_if); [ -n "$wan" ] || { err "Не нашла сетевую карту с выходом в интернет."; return 1; }
+  wan=$(awg_wan_if); [ -n "$wan" ] || { err "Не нашёл сетевую карту с выходом в интернет."; return 1; }
 
   awg_get_pkgs || return 1
 
@@ -230,7 +230,7 @@ awg_install_core() {
   AWG_PSK=$(awg genpsk); AWG_HPK=$(awg genkey)
   AWG_JC=$(awg_rand 4 6); AWG_JMIN=10; AWG_JMAX=50; AWG_S=12
   AWG_ENDPOINT="${KB_SERVER_IP:-$(server_ip)}"
-  [ -n "$AWG_ENDPOINT" ] || { err "Не узнала внешний IP сервера."; return 1; }
+  [ -n "$AWG_ENDPOINT" ] || { err "Не узнал внешний IP сервера."; return 1; }
   mkdir -p "$AWG_DIR"; chmod 700 "$AWG_DIR"
   AWG_WAN="$wan"
   awg_save_env
@@ -360,7 +360,7 @@ awg_remove_core() {
   rm -f /etc/amnezia/amneziawg/awg0.conf /etc/sysctl.d/99-kombain-awg.conf
   rm -rf "${KB_HOME:?}/awg"
   fw_unregister awg
-  ok "AmneziaWG удалён (пакет оставила: apt remove amneziawg — если не нужен совсем)"
+  ok "AmneziaWG удалён (пакет оставил: apt remove amneziawg — если не нужен совсем)"
 }
 
 # ───────────────────────── меню и команды ─────────────────────────

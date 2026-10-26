@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Только интернет: зайти на сервер по SSH. Ни контактов, ни файлов, ни камеры. -->
+    <!-- Интернет: зайти на сервер по SSH и проверить обновление на GitHub. Ни контактов, ни файлов, ни камеры. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Обновить себя по кнопке «Обновить»: Android всё равно спросит человека. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Открыть Telegram по ссылке прокси и бота. -->
     <queries>
@@ -29,6 +31,7 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

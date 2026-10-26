@@ -304,28 +304,20 @@ func TestHostKeyPinning(t *testing.T) {
 	if err := a.login(addr, "root", "secret-pass"); err != nil {
 		t.Fatal(err)
 	}
-	if s := wait(a); s.ErrKind != "newhost" {
-		t.Fatalf("ждала newhost, а тут %q: %s", s.ErrKind, s.Error)
+	// Первый вход: ключ запоминается молча, без вопроса, пароль уходит.
+	if s := wait(a); s.ErrKind != "" || !s.NewHost {
+		t.Fatalf("первый вход должен пройти молча: errKind=%q newHost=%v: %s", s.ErrKind, s.NewHost, s.Error)
 	}
-	select {
-	case p := <-seen:
-		t.Fatalf("пароль ушёл на неподтверждённый сервер: %q", p)
-	default:
-	}
-	if err := a.trustHost(); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.login(addr, "root", "secret-pass"); err != nil {
-		t.Fatal(err)
-	}
-	wait(a)
 	select {
 	case p := <-seen:
 		if p != "secret-pass" {
 			t.Fatal("не тот пароль")
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("после подтверждения пароль должен уйти")
+		t.Fatal("на новый сервер пароль должен уйти")
+	}
+	if a.known.get(addr) == "" {
+		t.Fatal("ключ нового сервера не запомнен")
 	}
 	stop()
 
@@ -395,5 +387,116 @@ func TestKnownHostsWriteFailure(t *testing.T) {
 	}
 	if newKnownHosts(dir+"/kh.json").get("1.2.3.4:22") != "SHA256:abc" {
 		t.Fatal("не сохранилось между запусками")
+	}
+}
+
+// Связь оборвалась между входом и установкой (на телефоне — пока человек в Telegram):
+// установщик должен тихо войти заново и доделать, а не писать «Не встало».
+func TestInstallReconnects(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := ssh.NewSignerFromKey(priv)
+	config := &ssh.ServerConfig{PasswordCallback: func(meta ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
+		if string(p) != "test-pass" {
+			return nil, fmt.Errorf("bad")
+		}
+		return nil, nil
+	}}
+	config.AddHostKey(signer)
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	conns := make(chan struct{}, 10)
+	go func() {
+		for {
+			conn, e := l.Accept()
+			if e != nil {
+				return
+			}
+			go func() {
+				server, chans, reqs, e := ssh.NewServerConn(conn, config)
+				if e != nil {
+					return
+				}
+				conns <- struct{}{}
+				defer server.Close()
+				go func() {
+					for r := range reqs {
+						_ = r.Reply(true, nil) // keepalive
+					}
+				}()
+				for ch := range chans {
+					channel, requests, e := ch.Accept()
+					if e != nil {
+						return
+					}
+					go func() {
+						defer channel.Close()
+						for req := range requests {
+							var payload struct{ Command string }
+							_ = ssh.Unmarshal(req.Payload, &payload)
+							_ = req.Reply(true, nil)
+							switch payload.Command {
+							case installCommand:
+								_, _ = bufio.NewReader(channel).ReadString('\n')
+								fmt.Fprintln(channel, `{"bot":"test_kombain_bot","code":"012345"}`)
+							case ownerCommand:
+								fmt.Fprintln(channel, "12345")
+							case "id -u":
+								fmt.Fprintln(channel, "0")
+							}
+							_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
+							return
+						}
+					}()
+				}
+			}()
+		}
+	}()
+	addr := l.Addr().String()
+	a := newInstaller()
+	a.known = newKnownHosts(t.TempDir() + "/kh.json")
+	defer a.close()
+	if err := a.login(addr, "root", "test-pass"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && a.snapshot().Phase != "telegram" {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if a.snapshot().Phase != "telegram" {
+		t.Fatalf("вход не прошёл: %+v", a.snapshot())
+	}
+	a.mu.Lock()
+	_ = a.client.Close() // обрыв связи
+	a.mu.Unlock()
+	if a.needLogin() {
+		t.Fatal("при обрыве вход заново не нужен — пароль в памяти")
+	}
+	if err := a.install("1234567890:AAH_test_token"); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) && a.snapshot().Phase != "done" {
+		time.Sleep(20 * time.Millisecond)
+	}
+	s := a.snapshot()
+	if s.Phase != "done" || s.Code != "012345" {
+		t.Fatalf("после обрыва не доделал: %+v", s)
+	}
+	if !strings.Contains(s.Log, "подключаюсь заново") {
+		t.Fatalf("в журнале нет переподключения: %q", s.Log)
+	}
+	if len(conns) < 2 {
+		t.Fatal("второго входа не было")
+	}
+	data, _ := json.Marshal(s)
+	if strings.Contains(string(data), "test-pass") {
+		t.Fatal("пароль попал в состояние окна")
+	}
+	a.close()
+	if a.pass != "" {
+		t.Fatal("после закрытия пароль остался в памяти")
 	}
 }

@@ -69,6 +69,7 @@ jobs:
         working-directory: android/app
         env:
           KB_KEYSTORE_PASS: ${{ secrets.KB_KEYSTORE_PASS }}
+          KB_CHANNEL: ${{ github.ref == 'refs/heads/android' && 'test' || 'release' }}
         run: |
           set -o pipefail
           if ! gradle --no-daemon assembleRelease 2>&1 | tee "$RUNNER_TEMP/gradle.log"; then

@@ -141,7 +141,7 @@ tgu_install_core() {
     warn "Стоит, но не отвечает — пробую просто перезапустить."
     systemctl restart kombain-telemt >/dev/null 2>&1
     for _t in $(seq 1 15); do tgu_api_up && { ok "Поднялся после перезапуска, люди на месте."; return 0; }; sleep 1; done
-    saved=$(tgu_backup) || { err "Не смогла сохранить людей и ключи — переустановку отменяю, ничего не трогала."; return 1; }
+    saved=$(tgu_backup) || { err "Не смог сохранить людей и ключи — переустановку отменяю, ничего не трогал."; return 1; }
     if [ -n "$saved" ]; then
       printf '%s\n%s\n' "$saved" "$old_port" >"$TGU_PENDING" && chmod 600 "$TGU_PENDING"
     fi
@@ -158,7 +158,7 @@ tgu_install_core() {
     if [ -n "$last" ]; then
       saved="$last"; access=$(tgu_saved_access "$last")
       [ -n "$old_port" ] || old_port=$(tgu_saved_port "$last")
-      warn "Нашла бэкап людей и ключей: $last — возвращаю. Начать с чистого листа: удали этот файл и поставь снова."
+      warn "Нашёл бэкап людей и ключей: $last — возвращаю. Начать с чистого листа: удали этот файл и поставь снова."
     fi
   fi
   ensure_pkgs curl jq tar qrencode || return 1
@@ -170,7 +170,7 @@ tgu_install_core() {
   fi
   [ -z "$(port_owner 9091 tcp)" ] || { err "Порт 9091 (пульт telemt) занят: $(port_owner 9091 tcp)"; return 1; }
   ip="${KB_SERVER_IP:-$(server_ip)}"
-  [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { err "Не узнала внешний IP сервера."; return 1; }
+  [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { err "Не узнал внешний IP сервера."; return 1; }
 
   tgu_get_bin || return 1
   step "Настраиваю Telegram-прокси по именам"
@@ -214,7 +214,7 @@ tls_front_dir = "tlsfront"
 EOF
   if grep -q '^\[access\.users\]' <<<"$access"; then
     printf '%s\n' "$access" >>"$TGU_CONF"
-    ok "Вернула людей из бэкапа вместе с выключенными — ссылки прежние, если порт не сменился."
+    ok "Вернул людей из бэкапа вместе с выключенными — ссылки прежние, если порт не сменился."
   else
     printf '[access.users]\nadmin = "%s"\n' "$(openssl rand -hex 16)" >>"$TGU_CONF"
   fi
@@ -237,7 +237,7 @@ EOF
 tgu_remove_core() {
   tgu_installed || { warn "Не установлено."; return 0; }
   if [ "${1:-}" != "--no-backup" ]; then
-    local f; f=$(tgu_backup) || { err "Не смогла сделать бэкап людей и ключей — удаление отменяю."; return 1; }
+    local f; f=$(tgu_backup) || { err "Не смог сделать бэкап людей и ключей — удаление отменяю."; return 1; }
     [ -n "$f" ] && ok "Бэкап людей и ключей: $f"
   fi
   systemctl disable --now kombain-telemt >/dev/null 2>&1

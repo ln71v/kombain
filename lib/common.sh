@@ -178,7 +178,7 @@ fw_apply() {
   for p in "${want[@]}" "${extra[@]}"; do ufw allow "$p" >/dev/null; done
   ufw --force enable >/dev/null && ok "Файрвол включён. Открыто: $(printf '%s ' "${want[@]}")"
   if [ ${#extra[@]} -gt 0 ]; then
-    warn "Оставила открытыми порты других программ: ${extra[*]}"
+    warn "Оставил открытыми порты других программ: ${extra[*]}"
     warn "Не нужны — закрой: ufw delete allow <порт>"
   fi
 }

@@ -21,7 +21,7 @@ kb_fetch() {
   local tmp
   tmp=$(mktemp -d)
   if ! curl -fsSL "https://codeload.github.com/$KB_REPO/tar.gz/refs/heads/$KB_BRANCH" | tar -xz -C "$tmp"; then
-    echo "Не смогла скачать Комбайн с GitHub. Проверь интернет на сервере." >&2
+    echo "Не смог скачать Комбайн с GitHub. Проверь интернет на сервере." >&2
     rm -rf "$tmp"
     exit 1
   fi

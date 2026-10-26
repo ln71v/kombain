@@ -48,7 +48,8 @@ type Snapshot struct {
 	ProxyTG     string `json:"proxyTG"`
 	ProxyWeb    string `json:"proxyWeb"`
 	ProxyQR     string `json:"proxyQR"`
-	ErrKind     string `json:"errKind"` // "noconnect" — нет связи (порт 22); "newhost"/"hostchanged" — ключ сервера не подтверждён
+	ErrKind     string `json:"errKind"` // "noconnect" — нет связи (порт 22); "hostchanged" — ключ сервера сменился
+	NewHost     bool   `json:"newHost"` // первый вход на этот сервер: ключ запомнен молча
 }
 
 type installer struct {
@@ -59,8 +60,12 @@ type installer struct {
 	closed     bool
 	generation uint64
 	known      *knownHosts
-	pendHost   string // сервер с неподтверждённым ключом — ждёт кнопки «Да, это мой сервер»
+	pendHost   string // сервер со сменившимся ключом — ждёт кнопки «Я переустановил сервер»
 	pendFP     string
+	// Данные входа — только в памяти программы, до её закрытия. Нужны, чтобы тихо
+	// переподключиться, если связь оборвалась (на телефоне — пока человек в Telegram).
+	// На диск и в журнал не попадают.
+	host, user, pass string
 }
 
 func newInstaller() *installer {
@@ -73,6 +78,7 @@ func (a *installer) close() {
 	a.generation++
 	c := a.client
 	a.client = nil
+	a.pass = ""
 	a.mu.Unlock()
 	if c != nil {
 		_ = c.Close()
@@ -130,6 +136,7 @@ func (a *installer) login(host, user, pass string) error {
 	g := a.generation
 	a.busy = true
 	a.state = Snapshot{Phase: "connecting"}
+	a.host, a.user, a.pass = "", "", "" // новый вход — старые данные забываем
 	a.mu.Unlock()
 	if old != nil {
 		_ = old.Close()
@@ -142,28 +149,25 @@ func (a *installer) login(host, user, pass string) error {
 			case fp:
 				return nil
 			case "":
-				hk = &hostKeyErr{kind: "newhost", fp: fp}
+				// Первый вход: сверить человеку не с чем — запоминаем молча.
+				// Громко — только если ключ потом сменится.
+				_ = a.known.set(host, fp)
+				a.update(g, func(s *Snapshot) { s.NewHost = true })
+				return nil
 			default:
 				hk = &hostKeyErr{kind: "hostchanged", fp: fp}
 			}
 			return hk // обрыв до входа: пароль не уходит
 		})
-		pass = "" // Пароль не сохраняется в состоянии, файлах или журнале.
 		if err != nil && hk != nil {
 			a.mu.Lock()
 			if !a.closed && a.generation == g {
 				a.pendHost, a.pendFP = host, hk.fp
 			}
 			a.mu.Unlock()
-			msg := "Первый вход на этот сервер. Пароль ещё НЕ отправлен.\n" +
-				"Отпечаток сервера: " + hk.fp + "\n" +
-				"Если это твой свежий сервер от хостера — жми «Да, это мой сервер». Дальше буду сверять сама."
-			if hk.kind == "hostchanged" {
-				msg = "⚠️ Ключ сервера изменился с прошлого раза. Пароль НЕ отправлен.\n" +
-					"Так бывает, если ты переустановил сервер у хостера. Если не переустанавливал — кто-то может " +
-					"подменять связь: не входи, раздай интернет с телефона и попробуй снова.\n" +
-					"Новый отпечаток: " + hk.fp
-			}
+			msg := "⚠️ Сервер выглядит не так, как в прошлый раз. Пароль НЕ отправлен.\n" +
+				"Так бывает, если ты переустановил сервер у хостера — тогда жми кнопку ниже.\n" +
+				"Если не переустанавливал — не входи: кто-то может подменять связь. Переключи интернет (Wi-Fi или мобильный) и попробуй снова."
 			a.update(g, func(s *Snapshot) { s.ErrKind = hk.kind })
 			a.finish(g, "login", msg)
 			return
@@ -194,6 +198,7 @@ func (a *installer) login(host, user, pass string) error {
 			return
 		}
 		a.client = c
+		a.host, a.user, a.pass = host, user, pass
 		a.busy = false
 		a.state.Phase = "telegram"
 		a.state.Network = org
@@ -381,11 +386,11 @@ func (a *installer) install(token string) error {
 		a.mu.Unlock()
 		return errors.New("Подожди, выполняю предыдущий шаг.")
 	}
-	if a.client == nil {
+	if a.client == nil && a.pass == "" {
 		a.mu.Unlock()
 		return errors.New("Сначала войди на сервер.")
 	}
-	c, g := a.client, a.generation
+	g := a.generation
 	a.busy = true
 	a.state.Phase = "installing"
 	a.state.Error = ""
@@ -402,6 +407,13 @@ func (a *installer) install(token string) error {
 				}
 			})
 		}}
+		note := func(t string) { log.Write([]byte("· " + t + "\n")) }
+		c, err := a.alive(g, note)
+		if err != nil {
+			token = ""
+			a.finish(g, "install-error", err.Error())
+			return
+		}
 		out, err := run(c, installCommand, token+"\n", log)
 		log.flush()
 		token = ""
@@ -410,7 +422,18 @@ func (a *installer) install(token string) error {
 			Code string `json:"code"`
 		}
 		if err != nil || json.Unmarshal([]byte(lastLine(out)), &info) != nil || !regexp.MustCompile(`^[0-9]{6}$`).MatchString(info.Code) || info.Bot == "" {
-			a.finish(g, "install-error", "Не встало. Если в журнале написано про токен — скопируй его у @BotFather ещё раз. Проверь также связь с сервером.")
+			msg := "Не встало."
+			if isClosed(c) {
+				msg = errLost.Error()
+				a.mu.Lock()
+				if a.client == c {
+					a.client = nil
+				}
+				a.mu.Unlock()
+			} else if r := reason(a.snapshot().Log); r != "" {
+				msg = "Не встало: " + r
+			}
+			a.finish(g, "install-error", msg)
 			return
 		}
 		if !a.update(g, func(s *Snapshot) { s.Step = 2; s.Phase = "launching" }) {
@@ -437,13 +460,16 @@ func (a *installer) waitOwner(c *ssh.Client, g uint64) {
 		if !alive {
 			return
 		}
+		if nc, e := a.alive(g, nil); e == nil {
+			c = nc
+		}
 		owner, err := run(c, ownerCommand, "", nil)
 		if err == nil && owner != "" && owner != "0" {
 			a.finish(g, "done", "")
 			return
 		}
 		if err != nil {
-			a.finish(g, "wait-error", "Связь с сервером прервалась. Код сохранился на сервере: его можно отправить боту. Попробуй проверить ещё раз.")
+			a.finish(g, "wait-error", "Связь с сервером прервалась. Код сохранился на сервере — отправь его боту, потом нажми «Проверить ещё раз».")
 			return
 		}
 		time.Sleep(3 * time.Second)
@@ -456,7 +482,7 @@ func (a *installer) retryWait() error {
 		a.mu.Unlock()
 		return errors.New("Подожди, проверяю код.")
 	}
-	if a.client == nil || a.state.Code == "" {
+	if (a.client == nil && a.pass == "") || a.state.Code == "" {
 		a.mu.Unlock()
 		return errors.New("Сначала подключись к серверу.")
 	}
@@ -477,11 +503,11 @@ func (a *installer) installProxy() error {
 		a.mu.Unlock()
 		return errors.New("Подожди, выполняю предыдущий шаг.")
 	}
-	if a.client == nil {
+	if a.client == nil && a.pass == "" {
 		a.mu.Unlock()
 		return errors.New("Сначала войди на сервер.")
 	}
-	c, g := a.client, a.generation
+	g := a.generation
 	a.busy = true
 	a.state.Phase = "proxy-installing"
 	a.state.Error = ""
@@ -498,6 +524,12 @@ func (a *installer) installProxy() error {
 			})
 		}}
 		note := func(f string, v ...interface{}) { log.Write([]byte("· " + fmt.Sprintf(f, v...) + "\n")) }
+		c, cerr := a.alive(g, func(t string) { note("%s", t) })
+		if cerr != nil {
+			log.flush()
+			a.finish(g, "proxy-error", cerr.Error())
+			return
+		}
 		note("Отправляю команду на сервер")
 		stop := make(chan struct{})
 		go func() { // раз в 20 секунд — «жива, жду», чтобы было видно, что программа не зависла
@@ -521,9 +553,12 @@ func (a *installer) installProxy() error {
 		log.flush()
 		tg, web, qr, ok := parseProxy(lastLine(out))
 		if err != nil || !ok {
-			msg := "Прокси не встал. Разверни «Подробнее» — там написано почему. Можно попробовать ещё раз."
+			msg := "Прокси не встал. Можно попробовать ещё раз."
+			if r := reason(a.snapshot().Log); r != "" && err == nil {
+				msg = "Прокси не встал: " + r
+			}
 			if isClosed(c) {
-				msg = "Связь с сервером оборвалась. Нажми «Попробовать ещё раз» — войду на сервер заново."
+				msg = errLost.Error()
 				a.mu.Lock()
 				if a.client == c {
 					a.client = nil
@@ -586,4 +621,84 @@ func isClosed(c *ssh.Client) bool {
 }
 
 // needLogin — соединение оборвалось, нужен повторный вход.
-func (a *installer) needLogin() bool { a.mu.Lock(); defer a.mu.Unlock(); return a.client == nil }
+func (a *installer) needLogin() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.client == nil && a.pass == ""
+}
+
+// alive — соединение для следующего шага. Оборвалось — тихо входим заново с теми же
+// данными (пароль в памяти). Ключ сервера обязан совпасть с запомненным, иначе пароль не уходит.
+func (a *installer) alive(g uint64, note func(string)) (*ssh.Client, error) {
+	a.mu.Lock()
+	c, host, user, pass := a.client, a.host, a.user, a.pass
+	a.mu.Unlock()
+	if c != nil && !isClosed(c) {
+		return c, nil
+	}
+	if host == "" || pass == "" {
+		return nil, errLost
+	}
+	if note != nil {
+		note("Связь с сервером оборвалась — подключаюсь заново")
+	}
+	var nc *ssh.Client
+	var err error
+	for try := 0; try < 3; try++ {
+		nc, err = connect(host, user, pass, func(fp string) error {
+			if a.known.get(host) == fp {
+				return nil
+			}
+			return &hostKeyErr{kind: "hostchanged", fp: fp}
+		})
+		if err == nil {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
+	pass = ""
+	if err != nil {
+		a.mu.Lock()
+		if a.client == c {
+			a.client = nil
+		}
+		a.mu.Unlock()
+		return nil, errLost
+	}
+	a.mu.Lock()
+	if a.closed || a.generation != g {
+		a.mu.Unlock()
+		_ = nc.Close()
+		return nil, errLost
+	}
+	old := a.client
+	a.client = nc
+	a.mu.Unlock()
+	if old != nil && old != nc {
+		_ = old.Close()
+	}
+	if note != nil {
+		note("Подключился заново, продолжаю")
+	}
+	return nc, nil
+}
+
+var errLost = errors.New("Связь с сервером оборвалась. Нажми «Попробовать ещё раз» и введи пароль заново.")
+
+var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// reason — последняя осмысленная строка журнала сервера: её и показываем человеку.
+func reason(log string) string {
+	lines := strings.Split(ansiPattern.ReplaceAllString(log, ""), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(lines[i]), "✖!·▶ "))
+		if l == "" || strings.HasPrefix(l, "Жду ответ сервера") {
+			continue
+		}
+		if r := []rune(l); len(r) > 200 {
+			l = string(r[:200]) + "…"
+		}
+		return l
+	}
+	return ""
+}

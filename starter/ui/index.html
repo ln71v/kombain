@@ -20,6 +20,31 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
 #wait-error{max-width:540px}#screen-11 #retry-wait,#screen-11 #close-final{height:36px;flex-shrink:0}
 #screen-11 .message{font-size:12px;padding:6px 10px}
 #screen-11:has(#wait-error:not([hidden]))>div>div:nth-child(2){gap:10px!important;padding-top:22px!important}
+button{transition:filter .12s,transform .12s}button:not(:disabled):active{filter:brightness(.88);transform:scale(.98)}
+.primary:not(:disabled):hover{filter:brightness(1.08)}
+.secondary,.screen button[style*="border: 1px solid #D9D5CC"]{border:1.5px solid #0E6B5C!important;color:#0E6B5C!important;font-weight:700!important}
+.kb-link{color:#0E6B5C;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.kb-link::after{content:" ↗";text-decoration:none;display:inline-block;margin-left:2px}
+.calm{margin:0;font-size:14px;line-height:1.5;color:#0A4F44;background:#E3F1EC;border-radius:10px;padding:10px 14px}
+.paste-wrap{position:relative}.paste-wrap input{padding-right:104px!important}
+.paste-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);height:32px;padding:0 12px;border-radius:8px;border:1.5px solid #D9D5CC;background:#FFF;color:#8A9099;font:700 13px Manrope,sans-serif;cursor:pointer}
+.paste-wrap:focus-within .paste-btn{border-color:#0E6B5C;background:#0E6B5C;color:#FFF}
+#screen-11 .paste-btn:active,.paste-btn:active{transform:translateY(-50%) scale(.96)}
+.bf-steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;counter-reset:bf}
+.bf-steps li{display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:1.45;counter-increment:bf}
+.bf-steps li::before{content:counter(bf);width:26px;height:26px;flex-shrink:0;border-radius:13px;background:#0E6B5C;color:#FFF;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.bf-pics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+.tgc{border-radius:10px;overflow:hidden;border:1px solid #D9D5CC;font-size:10.5px;line-height:1.35;color:#111;display:flex;flex-direction:column}
+.tgc .cap{background:#FFF;color:#18212B;font-weight:700;font-size:11px;padding:5px 7px}
+.tgc .top{background:#517DA2;color:#FFF;font-weight:700;padding:5px 7px}
+.tgc .chat{background:#C8D8B4;padding:6px;display:flex;flex-direction:column;gap:4px;flex:1}
+.tgc .l,.tgc .r{max-width:88%;border-radius:8px;padding:4px 6px}
+.tgc .l{align-self:flex-start;background:#FFF}.tgc .r{align-self:flex-end;background:#EFFDDE}
+.tgc .lk{color:#2A7BC2}.tgc .ul{border-bottom:2px solid #E0352B}.tgc .red{outline:2px solid #E0352B;outline-offset:1px;border-radius:3px}
+.tgc .note{background:#FFF4D6;color:#6B4A00;border:1px dashed #D9A520;border-radius:6px;padding:3px 6px;font-weight:700}
+.tgc .bar{background:#FFF;display:flex;align-items:center;gap:6px;padding:5px 7px;color:#8A8F95}
+.tgc .bar .f{flex:1;color:#111}.tgc .snd{width:22px;height:22px;border-radius:11px;background:#3E9BE0;color:#FFF;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #FFF,0 0 0 4px #E0352B;font-size:11px}
+.bf-cheat summary{margin-top:2px}
 </style></head><body><section class="screen" id="screen-1"><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
   <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
     <div style="display: flex; align-items: center; gap: 10px">
@@ -266,30 +291,34 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
       <span style="width: 6px; height: 6px; border-radius: 3px; background: #D9D5CC"></span>
     </div>
   </div>
-  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; padding: 28px 44px 0">
-    <div style="display: flex; flex-direction: column; gap: 6px">
-      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Свой бот в Telegram</h1>
+  <div style="flex-grow: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 20px 44px 12px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 22px; line-height: 1.2">Свой бот в Telegram</h1>
       <p style="margin: 0; font-size: 14px; color: #5A6470">Через него ты будешь всем управлять. Создать — минута.</p>
     </div>
-    <div style="display: flex; flex-direction: column; gap: 10px">
-      <div style="display: flex; gap: 14px; align-items: center">
-        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">1</span>
-        <span style="font-size: 15px">В Telegram найди <b>@BotFather</b> (с синей галочкой)</span>
-      </div>
-      <div style="display: flex; gap: 14px; align-items: center">
-        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">2</span>
-        <span style="font-size: 15px">Напиши ему <b>/newbot</b></span>
-      </div>
-      <div style="display: flex; gap: 14px; align-items: center">
-        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">3</span>
-        <span style="font-size: 15px">Придумай имя, а потом адрес — латиницей, в конце <b>bot</b></span>
-      </div>
-      <div style="display: flex; gap: 14px; align-items: center">
-        <span style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px">4</span>
-        <span style="font-size: 15px">Он пришлёт токен — длинную строку</span>
-      </div>
-    </div>
-    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #FFFFFF; border: 1px dashed #D9D5CC; border-radius: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 15px; color: #5A6470">1234567890:AAH…<span style="margin-left: auto; font-family: 'Manrope', sans-serif; font-size: 13px">так выглядит токен</span></div>
+    <ol class="bf-steps">
+      <li><span>Открой <a class="kb-link" data-open="https://t.me/BotFather">@BotFather</a> — Telegram откроется сам. Внизу нажми «Запустить».</span></li>
+      <li><span>В его сообщении нажми синюю <b>/newbot</b> — это кнопка.</span></li>
+      <li><span><b>Имя бота</b> — напиши в строке сообщения внизу и отправь. Любое, можно по-русски, потом поменяешь.</span></li>
+      <li><span><b>Адрес бота</b> — тоже напиши и отправь. Латиницей, 5–32 знака, на конце <b>bot</b>, например <b>my_pult_bot</b>. Занят — добавь цифру.</span></li>
+      <li><span>Придёт <b>токен</b> — длинная строка вида 1234567890:AAH…. Нажми на неё — скопируется.</span></li>
+    </ol>
+    <details class="bf-cheat"><summary>Шпаргалка в картинках</summary>
+    <div class="bf-pics">
+      <div class="tgc"><div class="cap">1. Нажми /newbot</div><div class="top">BotFather ✔</div><div class="chat">
+        <div class="l">I can help you create and manage Telegram bots…<br><br><span class="lk ul">/newbot</span> - create a new bot<br><span class="lk">/mybots</span> - edit your bots<br>…</div>
+        <div class="note">Синяя /newbot — кнопка. Нажми</div></div></div>
+      <div class="tgc"><div class="cap">2. Имя — напиши и отправь</div><div class="chat">
+        <div class="r">/newbot</div>
+        <div class="l">Alright, a new bot. How are we going to call it? Please choose a name for your bot.</div>
+        <div class="note">Просит имя. Любое, по-русски</div></div>
+        <div class="bar"><span class="f">Мой пульт</span><span class="snd">➤</span></div></div>
+      <div class="tgc"><div class="cap">3. Адрес на bot → токен</div><div class="chat">
+        <div class="l">Good. Now let's choose a username for your bot. It must end in `bot`.</div>
+        <div class="r red">my_pult_bot</div>
+        <div class="l">Done! Congratulations on your new bot. You will find it at <span class="lk red">t.me/my_pult_bot</span>. …<br>Use this token to access the HTTP API:<br><span class="lk red">1234567890:AAH…</span></div>
+        <div class="note">Это токен. Нажми — скопируется</div></div></div>
+    </div></details>
     <div style="font-size: 14px; line-height: 1.5; color: #5A6470">⚠️ Telegram не грузится? Жми «пропустить» — сразу после входа на сервер поставлю прокси для Telegram, а бота создашь потом, в том же окне.</div>
   </div>
   <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
@@ -341,7 +370,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
 <div class="content"><h1>Вход на сервер</h1><p class="caption">Введи данные, которые прислал хостер.</p>
 <form id="login-form" autocomplete="off"><label>IP сервера<input id="host" type="text" placeholder="Например, 203.0.113.10" autocomplete="off" spellcheck="false" required></label>
 <div class="fields"><label>Логин<input id="user" value="root" autocomplete="off" spellcheck="false" required></label><label>Пароль<input id="password" type="password" autocomplete="off" required></label></div></form>
-<p id="pass-note" class="caption">Пароль нигде не сохраняется</p><div class="fingerprint" data-fingerprint hidden></div><div id="login-error" class="message" role="status" hidden></div><div id="login-hostkey" role="alert" hidden style="border:2px solid #B7791F;background:#FFF8E6;color:#5C3D00;border-radius:10px;padding:8px 12px;font-size:13px;line-height:1.4"><div id="hostkey-text" style="white-space:pre-line;overflow-wrap:anywhere"></div><button type="button" id="hostkey-ok" class="primary" style="margin-top:8px">Да, это мой сервер</button></div><div id="login-port" role="alert" hidden style="border:2px solid #C0392B;background:#FDECEA;color:#8E1B10;border-radius:10px;padding:8px 12px;font-size:13px;line-height:1.4"><b style="font-size:14px">⚠️ Нет связи с сервером — это не твоя ошибка</b><br>Вход идёт через порт 22 — стандарт для всех серверов. Некоторые провайдеры его блокируют.<br><b>Раздай интернет с телефона</b> и нажми ещё раз. Не помогло — смени сервер или попроси знающего человека сменить порт.</div></div><div class="footer"><button class="secondary" data-go="7">← Назад</button><button id="login-submit" form="login-form" type="submit" class="primary">Войти →</button></div></div></section>
+<p id="pass-note" class="caption">Пароль нигде не сохраняется</p><div class="fingerprint" data-fingerprint hidden></div><div id="login-error" class="message" role="status" hidden></div><div id="login-hostkey" role="alert" hidden style="border:2px solid #B7791F;background:#FFF8E6;color:#5C3D00;border-radius:10px;padding:8px 12px;font-size:13px;line-height:1.4"><div id="hostkey-text" style="white-space:pre-line;overflow-wrap:anywhere"></div><button type="button" id="hostkey-ok" class="primary" style="margin-top:8px">Я переустановил сервер — доверять</button></div><div id="login-port" role="alert" hidden style="border:2px solid #C0392B;background:#FDECEA;color:#8E1B10;border-radius:10px;padding:8px 12px;font-size:13px;line-height:1.4"><b style="font-size:14px">⚠️ Нет связи с сервером — это не твоя ошибка</b><br>Вход идёт через порт 22 — стандарт для всех серверов. Некоторые провайдеры его блокируют.<br><b>Раздай интернет с телефона</b> и нажми ещё раз. Не помогло — смени сервер или попроси знающего человека сменить порт.</div></div><div class="footer"><button class="secondary" data-go="7">← Назад</button><button id="login-submit" form="login-form" type="submit" class="primary">Войти →</button></div></div></section>
 <section class="screen" id="screen-9" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
   <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
     <div style="display: flex; align-items: center; gap: 10px">
@@ -350,7 +379,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
     </div>
     <span class="caption">Установка</span>
   </div>
-<div class="content"><h1>Установка Telegram-бота</h1><p class="caption">Бот — твой пульт: через него дальше ставится VPN, нейронки и всё остальное.<br>Вставь токен — длинную строку, которую прислал @BotFather.<br>Ещё нет токена? В Telegram: <b>@BotFather</b> → <b>/newbot</b> → имя → адрес латиницей с <b>bot</b> в конце → скопируй токен.</p><form id="token-form" autocomplete="off"><label>Токен бота<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="1234567890:AAH…" required></label></form><p class="caption">Токен передаётся на сервер через защищённое SSH-соединение.</p><div class="fingerprint" data-fingerprint hidden></div><div id="token-error" class="message" role="status" hidden></div></div><div class="footer"><button class="secondary" data-go="12">← Назад</button><button id="token-submit" form="token-form" type="submit" class="primary">Установить →</button></div></div></section>
+<div class="content"><h1>Установка Telegram-бота</h1><p class="caption">Бот — твой пульт: через него дальше ставится VPN, нейронки и всё остальное.<br>Вставь токен — длинную строку, которую прислал @BotFather.<br>Ещё нет токена? Открой <a class="kb-link" data-open="https://t.me/BotFather">@BotFather</a> → /newbot → имя → адрес на <b>bot</b> → скопируй токен.</p><form id="token-form" autocomplete="off"><label>Токен бота<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="1234567890:AAH…" required></label></form><p class="caption">Токен передаётся на сервер через защищённое SSH-соединение.</p><div class="fingerprint" data-fingerprint hidden></div><div id="token-error" class="message" role="status" hidden></div></div><div class="footer"><button class="secondary" data-go="12">← Назад</button><button id="token-submit" form="token-form" type="submit" class="primary">Установить →</button></div></div></section>
 <section class="screen" id="screen-10" hidden><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
   <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
     <div style="display: flex; align-items: center; gap: 10px">
@@ -370,7 +399,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
   </div>
   <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 32px 44px 0">
     <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 22px; line-height: 1.2; text-align: center">Последний шаг — отдай боту код</h1>
-    <div style="display: flex; gap: 8px">
+    <div id="digits" style="display: flex; gap: 8px">
       <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-0">–</span>
       <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-1">–</span>
       <span style="width: 56px; height: 68px; border-radius: 10px; background: #FFFFFF; border: 2px solid #0E6B5C; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 32px; color: #0A4F44" id="digit-2">–</span>
@@ -381,7 +410,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
     <div style="display: flex; flex-direction: column; gap: 10px; align-self: stretch; padding: 0 40px">
       <div style="display: flex; gap: 14px; align-items: center">
         <span style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 14px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">1</span>
-        <span style="font-size: 15px">Открой в Telegram <b><span id="bot-name"></span></b></span>
+        <span style="font-size: 15px">Открой в Telegram <span id="bot-name" class="kb-link"></span></span>
       </div>
       <div style="display: flex; gap: 14px; align-items: center">
         <span style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 14px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">2</span>
@@ -407,7 +436,7 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
     <span class="caption">Telegram</span>
   </div>
 <div class="content">
-<div id="tg-ask"><h1>Telegram у тебя открывается?</h1>
+<div id="tg-ask"><p id="newhost-note" class="calm" hidden style="margin-bottom:14px">Это твой личный сервер. Им пользуешься только ты и те, кому ты сам дашь доступ. Я его запомнил и дальше проверяю сам.</p><h1>Telegram у тебя открывается?</h1>
 <p class="caption" style="margin-top:10px">Дальше всё делается в Telegram-боте. Если Telegram без VPN не грузится — сначала поставлю на твой сервер прокси для Telegram. Это одна ссылка: нажал — и Telegram заработал.</p>
 <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
 <button id="tg-yes" class="secondary" style="height:52px;text-align:left;font-weight:700;color:#18212B">✅ Да, Telegram работает</button>
@@ -421,12 +450,12 @@ summary{cursor:pointer;color:#0E6B5C;font-size:14px;font-weight:700}pre{height:1
 <img id="proxy-qr" alt="QR-код прокси" style="width:150px;height:150px;flex-shrink:0;background:#FFF;border:1px solid #E4E1DA;border-radius:10px" hidden>
 <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.45">
 <div><b>На телефоне:</b> наведи камеру на QR-код → «Открыть в Telegram» → «Подключить прокси».</div>
-<div><b>На этом компьютере:</b> кнопка «Открыть в Telegram» ниже.</div>
+<div><b>На этом компьютере:</b> кнопка «Открыть в Telegram ↗» ниже.</div>
 <div class="caption">Работают сообщения, фото, видео, кружки, голосовые. Звонки — нет: они идут мимо прокси, для них нужен VPN. VPN поставишь потом из бота.</div>
 </div></div>
 <label>Ссылка, если нужно переслать<input id="proxy-web" readonly spellcheck="false"></label>
 <div id="open-error" class="message" role="status" hidden></div></div>
-</div><div class="footer"><button class="secondary" id="tg-back">← Назад</button><span style="display:flex;gap:10px"><button id="proxy-open" class="secondary" hidden>Открыть в Telegram</button><button id="retry-proxy" class="primary" hidden>Попробовать ещё раз</button><button id="tg-next" class="primary" hidden>Telegram заработал →</button></span></div></div></section><script>
+</div><div class="footer"><button class="secondary" id="tg-back">← Назад</button><span style="display:flex;gap:10px"><button id="proxy-open" class="secondary" hidden>Открыть в Telegram ↗</button><button id="retry-proxy" class="primary" hidden>Попробовать ещё раз</button><button id="tg-next" class="primary" hidden>Telegram заработал →</button></span></div></div></section><script>
 'use strict';
 const $=id=>document.getElementById(id);
 let page=1,choice='gemini',localBusy=false,lastPhase='',lastLog='';
@@ -449,7 +478,15 @@ const aiButtons=$('screen-3').querySelectorAll('button');
 aiButtons[0].onclick=()=>selectAI('gemini');aiButtons[1].onclick=()=>selectAI('other');aiButtons[2].onclick=()=>selectAI('any');
 $('consent').onchange=()=>{$('start').disabled=!$('consent').checked;};
 // Ссылки дизайна остаются видимыми, но не открывают внешние страницы из приложения.
-document.querySelectorAll('a').forEach(a=>a.onclick=e=>{e.preventDefault();});
+// Внешние ссылки открываются только через Комбайн и только из короткого списка (t.me, GitHub Комбайна).
+document.querySelectorAll('a').forEach(a=>a.onclick=e=>{e.preventDefault();const u=a.dataset.open||'';if(u)bridge('openLink',u).catch(()=>{});});
+$('bot-name').onclick=()=>{const n=$('bot-name').textContent.replace(/^@/,'').trim();if(n)bridge('openLink','https://t.me/'+n).catch(()=>{});};
+// Кнопка «Вставить» в полях: тапнул в поле — кнопка загорелась — нажал.
+['host','password','token'].forEach(id=>{const inp=$(id),w=document.createElement('span');w.className='paste-wrap';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);
+ const b=document.createElement('button');b.type='button';b.className='paste-btn';b.textContent='Вставить';b.tabIndex=-1;w.appendChild(b);
+ b.onmousedown=e=>e.preventDefault();
+ b.onclick=async()=>{let t='';try{t=await bridge('readClipboard');}catch(e){}t=String(t||'').trim();if(id!=='password')t=t.replace(/\s+/g,'');
+  if(!t){b.textContent='Буфер пуст';setTimeout(()=>b.textContent='Вставить',1500);inp.focus();return;}inp.value=t;t='';inp.focus();};});
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(Number(b.dataset.go)));
 $('login-form').onsubmit=async e=>{
  e.preventDefault();if(localBusy)return;localBusy=true;message('login-error','');$('login-submit').disabled=true;
@@ -459,7 +496,7 @@ $('login-form').onsubmit=async e=>{
  finally{pass='';localBusy=false;}
 };
 $('hostkey-ok').onclick=async()=>{
- try{await bridge('trustHost');$('login-hostkey').hidden=true;message('login-error','Запомнила сервер. Введи пароль ещё раз и жми «Войти».');$('password').focus();}
+ try{await bridge('trustHost');$('login-hostkey').hidden=true;message('login-error','Запомнил новый ключ сервера. Введи пароль ещё раз и жми «Войти».');$('password').focus();}
  catch(err){$('login-hostkey').hidden=true;message('login-error',errorText(err));$('password').focus();}
 };
 $('token-form').onsubmit=async e=>{
@@ -469,7 +506,7 @@ $('token-form').onsubmit=async e=>{
  catch(err){message('token-error',errorText(err));}
  finally{token='';localBusy=false;$('token-submit').disabled=false;}
 };
-$('retry-install').onclick=()=>{show(9);message('token-error','Скопируй токен ещё раз и повтори установку.');$('token-submit').textContent='Попробовать ещё раз';};
+$('retry-install').onclick=async()=>{let relog=false;try{relog=await bridge('needLogin');}catch(e){}if(relog){show(8);message('login-error','Связь с сервером оборвалась. Введи пароль ещё раз — дальше продолжу с того же места.');return;}show(9);message('token-error','Вставь токен ещё раз и повтори установку.');$('token-submit').textContent='Попробовать ещё раз';};
 $('retry-wait').onclick=async()=>{try{await bridge('retryOwner');lastPhase='';}catch(e){message('wait-error',errorText(e));}};
 $('close-final').onclick=()=>bridge('closeWindow').catch(()=>{});
 function tgView(v,err){$('tg-ask').hidden=v!=='ask';$('tg-wait').hidden=v!=='wait';$('tg-ready').hidden=v!=='ready';$('tg-next').hidden=v!=='ready';$('proxy-open').hidden=v!=='ready';$('tg-back').hidden=v==='wait'&&!err;$('retry-proxy').hidden=!err;$('proxy-slow').hidden=true;clearTimeout(slowTimer);if(v==='wait'&&!err)slowTimer=setTimeout(()=>{$('proxy-slow').hidden=false;},180000);}
@@ -483,12 +520,12 @@ $('tg-next').onclick=()=>show(9);
 $('proxy-open').onclick=async()=>{message('open-error','');try{await bridge('openProxy');}catch(e){message('open-error','Не открылось. Telegram Desktop стоит? Если нет — скопируй ссылку или отсканируй QR телефоном.');}};
 $('proxy-web').onfocus=e=>e.target.select();
 function render(s){
- document.querySelectorAll('[data-fingerprint]').forEach(el=>{el.textContent=s.fingerprint?'Отпечаток сервера: '+s.fingerprint:'';el.hidden=!s.fingerprint;});
+ $('newhost-note').hidden=!s.newHost;
  $('login-submit').disabled=s.phase==='connecting';
  if(s.phase==='connecting')$('login-submit').textContent='Захожу на сервер…';
  const noConn=s.phase==='login'&&s.errKind==='noconnect';$('login-port').hidden=!noConn;$('pass-note').hidden=noConn;
- const hostKey=s.phase==='login'&&['newhost','hostchanged'].includes(s.errKind);$('login-hostkey').hidden=!hostKey;
- if(hostKey){$('hostkey-text').textContent=s.error;$('hostkey-ok').textContent=s.errKind==='hostchanged'?'Я переустановил сервер — доверять новому':'Да, это мой сервер';}
+ const hostKey=s.phase==='login'&&s.errKind==='hostchanged';$('login-hostkey').hidden=!hostKey;
+ if(hostKey){$('hostkey-text').textContent=s.error;}
  if(s.phase==='login' && s.error){message('login-error',noConn||hostKey?'':s.error);$('login-submit').textContent=hostKey?'Войти →':'Попробовать ещё раз';}
  if(s.log!==lastLog){for(const id of ['server-log','proxy-log']){const pre=$(id),bottom=pre.scrollHeight-pre.scrollTop-pre.clientHeight<30;pre.textContent=s.log;if(bottom)pre.scrollTop=pre.scrollHeight;}lastLog=s.log;}
  for(let i=1;i<=3;i++)$('step-'+i).textContent=s.step>=i?'✔':i===s.step+1?'◌':'○';

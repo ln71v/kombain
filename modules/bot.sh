@@ -79,7 +79,7 @@ bot_install_core() {
       tar -tzf "$last" 2>/dev/null | grep -qx admin_key || continue   # битый или без ключа — следующий
       if tar -xzf "$last" -C "$BOT_DIR" 2>/dev/null; then
         chmod 600 "$BOT_DIR"/admin_key "$BOT_DIR"/servers.json "$BOT_DIR"/known_hosts 2>/dev/null
-        ok "Вернула ключ бота и список серверов из $last"
+        ok "Вернул ключ бота и список серверов из $last"
         break
       fi
     done
@@ -166,7 +166,7 @@ bot_remove() {
       chmod 600 "$f"; ok "Ключ бота и список серверов сохранены: $f"
     else
       rm -f "$f"
-      err "Не смогла сохранить ключ бота — папку $BOT_DIR оставила. Служба бота уже выключена."
+      err "Не смог сохранить ключ бота — папку $BOT_DIR оставил. Служба бота уже выключена."
       return 1
     fi
   fi

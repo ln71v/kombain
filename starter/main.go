@@ -4,6 +4,7 @@ package main
 
 import (
 	_ "embed"
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -63,6 +64,14 @@ func main() {
 			// Открывает Telegram Desktop: он сам спросит «Подключить прокси?»
 			return exec.Command("rundll32", "url.dll,FileProtocolHandler", link).Start()
 		}},
+		{"openLink", func(url string) error {
+			if !linkOK.MatchString(url) {
+				return errors.New("Такую ссылку не открываю.")
+			}
+			// t.me откроется в Telegram Desktop, если он стоит, иначе — в браузере.
+			return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		}},
+		{"readClipboard", readClipboard},
 		{"appVersion", func() (string, error) { return version, nil }},
 		{"closeWindow", func() error { w.Dispatch(func() { w.Terminate() }); return nil }},
 	}

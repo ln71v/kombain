@@ -282,7 +282,7 @@ aip_start_adguard() {
   if [ -s "$AIP_AGH/conf/AdGuardHome.yaml" ]; then
     local f; f="$KB_BACKUP/adguard-$(date +%Y%m%d-%H%M%S).tar.gz"
     tar -czf "$f" -C "$(dirname "$AIP_AGH")" "$(basename "$AIP_AGH")" 2>/dev/null && chmod 600 "$f" \
-      || { err "Не смогла сохранить старый AdGuard в бэкап — установку останавливаю, ничего не стёрла."; return 1; }
+      || { err "Не смог сохранить старый AdGuard в бэкап — установку останавливаю, ничего не стёр."; return 1; }
     ok "Старый AdGuard сохранён: $f"
     # allowed_clients: строки «- имя»; пустые строки и комментарии внутри списка пропускаем
     AIP_OLD_CLIENTS="$AIP_OLD_CLIENTS $(awk '
@@ -294,7 +294,7 @@ aip_start_adguard() {
   AIP_OLD_CLIENTS=$(tr ' ' '\n' <<<"$AIP_OLD_CLIENTS" | grep -E '^[a-z0-9][a-z0-9-]{0,62}$' | sort -u | tr '\n' ' ')
   if [ -n "${AIP_OLD_CLIENTS// /}" ]; then
     printf '%s\n' "$AIP_OLD_CLIENTS" >"$AIP_PENDING" && chmod 600 "$AIP_PENDING" \
-      || { err "Не смогла записать список устройств — установку останавливаю, ничего не стёрла."; return 1; }
+      || { err "Не смог записать список устройств — установку останавливаю, ничего не стёр."; return 1; }
   fi
   rm -rf "$AIP_AGH"
   mkdir -p "$AIP_AGH/work" "$AIP_AGH/conf"
@@ -321,7 +321,7 @@ aip_start_adguard() {
     "$AIP_API/install/configure" 2>&1)
   code=$(tail -n1 <<<"$resp")
   if [ "$code" != "200" ]; then
-    err "Не смогла выполнить первичную настройку AdGuard (код $code)"
+    err "Не смог выполнить первичную настройку AdGuard (код $code)"
     say "AdGuard ответил: $(sed '$d' <<<"$resp" | head -c 600)"
     say "Кто держит порты 53 и 3000:"
     ss -H -tulnp 2>/dev/null | grep -E ':(53|3000) ' | head -10
@@ -399,7 +399,7 @@ aip_tune_dns() {
 aip_check_client() {
   local c="$1" log total ai
   log=$(aip_api GET "/querylog?limit=1000" | jq -c --arg c "$c" '[.data[]? | select(.client_id == $c)]') \
-    || { err "Не смогла прочитать журнал"; return 1; }
+    || { err "Не смог прочитать журнал"; return 1; }
   total=$(jq 'length' <<<"$log")
   if [ "$total" -eq 0 ]; then
     err "От «$c» за последние сутки ни одного запроса."
@@ -425,7 +425,7 @@ aip_set_clients() {
   cur=$(aip_api GET /access/list | jq -c '.allowed_clients // []')
   new=$(jq -nc --argjson cur "$cur" --args '$cur + $ARGS.positional | unique' "$@")
   aip_api POST /access/set "$(jq -nc --argjson a "$new" '{allowed_clients:$a, disallowed_clients:[], blocked_hosts:[]}')" >/dev/null \
-    || { err "Не смогла обновить список устройств"; return 1; }
+    || { err "Не смог обновить список устройств"; return 1; }
   ok "Разрешённые устройства: $(printf '%s' "$new" | jq -r 'join(", ")')"
 }
 
@@ -584,14 +584,14 @@ aip_install() {
     sec_cf_save "$CF_TOKEN"
   fi
 
-  step "Этап 4: записи — делаю сама"
+  step "Этап 4: записи — делаю сам"
   local rc=0
   sec_cf_records "$DNS_HOST" "$SERVER_IP" || rc=$?
   if [ "$rc" -eq 3 ] && confirm "Перезаписать эти имена на этот сервер?"; then
     rc=0; sec_cf_records "$DNS_HOST" "$SERVER_IP" force || rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    warn "Сама не смогла — сделай руками:"
+    warn "Сам не смог — сделай руками:"
     aip_explain_records "$SERVER_IP"
     pause
     aip_wait_dns "$DNS_HOST" "$SERVER_IP" || return 1

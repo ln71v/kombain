@@ -298,7 +298,7 @@ def make_records(chat, force=False):
                    env={"KB_SERVER_IP": ip}, timeout=90)
     if code == 0:
         records_ok[rec_key(domain)] = True
-        send_pre(chat, out, "🌐 Записи в Cloudflare сделала сама:")
+        send_pre(chat, out, "🌐 Записи в Cloudflare сделал сам:")
         return True
     if code == 3:
         send_pre(chat, out, "⚠️ Эти имена в Cloudflare уже заняты другим адресом. "
@@ -306,7 +306,7 @@ def make_records(chat, force=False):
                  inline([btn("✅ Да, перезаписать", "safe:mk:force")],
                         [btn("Сделаю руками", "safe:h:rec")], TO_SAFE))
         return False
-    send_pre(chat, out, "❌ Записи сама сделать не смогла:",
+    send_pre(chat, out, "❌ Записи сам сделать не смог:",
              inline([btn("🔁 Попробовать ещё раз", "safe:mk")], [btn("Сделаю руками", "safe:h:rec")], TO_SAFE))
     return False
 
@@ -325,7 +325,7 @@ def safe_screen(chat):
             f"{mark(domain)} 1. Домен{': ' + esc(domain) if domain else ''}\n"
             f"{mark(has_key)} 2. Ключ Cloudflare{': ' + esc(safe['cloudflare']) if has_key else ''}\n"
             f"{mark(client)} 3. Название телефона{': ' + esc(client) if client else ''}\n"
-            f"{mark(rec)} Записи в Cloudflare — сделаю сама"
+            f"{mark(rec)} Записи в Cloudflare — сделаю сам"
             f"{'' if domain and has_key else ' (нужны домен и ключ)'}\n")
     rows = []
     if not domain:
@@ -553,7 +553,7 @@ def safe_callback(chat, data):
     elif data == "safe:clrok":
         code, out = kb("secrets", "clear-domain", timeout=30)
         records_ok.clear()
-        send_pre(chat, out, "🗑 Готово" if code == 0 else "❌ Не убрала:")
+        send_pre(chat, out, "🗑 Готово" if code == 0 else "❌ Не убрал:")
         safe_screen(chat)
 
 
@@ -661,7 +661,7 @@ VLS_DOM_ABOUT = ("🌐 <b>Свой домен</b>\n\n"
                  "Сейчас без ключа сервер притворяется чужим сайтом ({sni}). "
                  "Со своим доменом он будет показывать твой собственный сайт-заглушку "
                  "с настоящим замком (сертификатом). Проверяющий увидит обычный сайт, адрес и сервер совпадают.\n\n"
-                 "Домен: <code>{dom}</code> — запись в Cloudflare и сертификат сделаю сама.\n"
+                 "Домен: <code>{dom}</code> — запись в Cloudflare и сертификат сделаю сам.\n"
                  "⚠️ Ключи у всех устройств поменяются — QR придётся отсканировать заново.")
 
 
@@ -790,7 +790,7 @@ def vls_callback(chat, data):
         if code != 0:
             send_pre(chat, out, "❌ Не получилось:", vls_after())
             return
-        vls_after_switch(chat, out, "✅ Вернула маску.")
+        vls_after_switch(chat, out, "✅ Вернул маску.")
 
 
 # ───────────────────────── общие экраны ─────────────────────────
@@ -894,7 +894,7 @@ def probe_run(host, port, password):
             subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], capture_output=True, timeout=300,
                            env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
     if not shutil.which("sshpass"):
-        return False, "❌ Не смогла поставить sshpass на этот сервер — без него не зайти по паролю."
+        return False, "❌ Не смог поставить sshpass на этот сервер — без него не зайти по паролю."
     with open(PROBE_SCRIPT) as f:
         script = f.read()
     r = pw_ssh(host, port, password, "bash -s", script, 240)
@@ -910,7 +910,7 @@ def probe_run(host, port, password):
 def probe_parse(host, port, r):
     if "PROBE_BEGIN" not in r.stdout:
         why = esc((r.stderr or r.stdout).strip()[-300:]) or "без объяснений"
-        return False, (f"❌ Не зашла на <code>{host}</code>:{port}.\n<pre>{why}</pre>\n"
+        return False, (f"❌ Не зашёл на <code>{host}</code>:{port}.\n<pre>{why}</pre>\n"
                        "Проверь IP и порт. Сервер мог ещё не подняться — подожди пару минут.")
     d = {}
     for line in r.stdout.split("PROBE_BEGIN", 1)[1].split("PROBE_END", 1)[0].splitlines():
@@ -965,7 +965,7 @@ def hostkey_changed(r):
 
 
 def hostkey_text(host):
-    return (f"⚠️ <b>Ключ сервера <code>{host}</code> изменился</b> с прошлого раза. Пароль НЕ отправила.\n\n"
+    return (f"⚠️ <b>Ключ сервера <code>{host}</code> изменился</b> с прошлого раза. Пароль НЕ отправил.\n\n"
             "Так бывает, если сервер переустановили у хостера. Если не переустанавливали — кто-то может "
             "подменять связь: не продолжай.")
 
@@ -1017,10 +1017,10 @@ def remote_kb(srv, args, env, timeout, text=True):
         return r.returncode, r.stdout
     out = (r.stdout + r.stderr).strip()
     if r.returncode == 255 and "Host key verification failed" in (r.stderr or ""):
-        out = (f"Ключ сервера {srv['ip']} изменился — команду не отправила. Переустанавливал сервер? "
+        out = (f"Ключ сервера {srv['ip']} изменился — команду не отправил. Переустанавливал сервер? "
                "«🗂 Мои серверы» → сервер → «🔍 Проверить снова» — там кнопка, что делать дальше.")
     elif r.returncode == 255 and not r.stdout:
-        out = f"Не достучалась до {srv['ip']} по ключу: {out[-200:]}"
+        out = f"Не достучался до {srv['ip']} по ключу: {out[-200:]}"
     return r.returncode, out
 
 
@@ -1049,7 +1049,7 @@ def srv_save_ask(chat, ip):
         return
     PW_CACHE.pop(ip, None)
     state[chat] = {"step": "srv_pass", "host": ip, "port": (pw or (None, "22"))[1]}
-    send(chat, f"🔑 Пароль root от <code>{ip}</code> ещё раз — прошло больше 15 минут, я его уже забыла.\n"
+    send(chat, f"🔑 Пароль root от <code>{ip}</code> ещё раз — прошло больше 15 минут, я его уже забыл.\n"
                "Сообщение сразу удалю.", inline(CANCEL))
 
 
@@ -1073,8 +1073,8 @@ def srv_save_run(chat, ip, port, password):
                                                      f"probe:forget:{ip}:{port}")], [btn("🏠 Меню", "home")]))
             return
         if r is None or "KEY_OK" not in r.stdout:
-            why = "неверный пароль" if r is not None and r.returncode == 5 else "не зашла"
-            send(chat, f"❌ Не смогла оставить <code>{ip}</code>: {why}.",
+            why = "неверный пароль" if r is not None and r.returncode == 5 else "не зашёл"
+            send(chat, f"❌ Не смог оставить <code>{ip}</code>: {why}.",
                  inline([btn("🔁 Ещё раз", f"srv:save:{ip}")], [btn("🏠 Меню", "home")]))
             return
         d = PROBE_INFO.get(ip, {})
@@ -1083,11 +1083,11 @@ def srv_save_run(chat, ip, port, password):
         t = subprocess.run(ssh_base(srv) + ["echo OK"], capture_output=True, text=True, timeout=40,
                            stdin=subprocess.DEVNULL)
         if "OK" not in t.stdout:
-            send(chat, f"❌ Ключ положила, но зайти по нему не вышло:\n<pre>{esc(t.stderr[-300:])}</pre>")
+            send(chat, f"❌ Ключ положил, но зайти по нему не вышло:\n<pre>{esc(t.stderr[-300:])}</pre>")
             return
         lst = [x for x in srv_load() if x["ip"] != ip] + [srv]
         srv_store(lst)
-        send(chat, f"💾 Оставила: <b>{esc(name)}</b> · <code>{ip}</code>.\n"
+        send(chat, f"💾 Оставил: <b>{esc(name)}</b> · <code>{ip}</code>.\n"
                    "Дальше хожу туда по своему ключу — пароль больше не нужен и нигде не лежит.\n\n"
                    "Кнопки внизу пока работают с прежним сервером. Переключиться — кнопкой ниже.",
              inline([btn("🎯 Работать с ним", f"srv:open:{ip}")], [btn("🗂 Мои серверы", "srv:list")]))
@@ -1196,8 +1196,8 @@ def srv_del(chat, ip, sure=False):
         forget_hostkey(ip, srv.get("port", "22"))
         if TARGET and TARGET["ip"] == ip:
             set_target(None)
-        send(chat, ("✅ Ключ стёрла, сервер забыла." if gone else
-                    "⚠️ Сервер забыла, но стереть ключ не вышло (сервер не ответил). Если он ещё жив — "
+        send(chat, ("✅ Ключ стёр, сервер забыл." if gone else
+                    "⚠️ Сервер забыл, но стереть ключ не вышло (сервер не ответил). Если он ещё жив — "
                     "убери строку kombain-admin из /root/.ssh/authorized_keys руками."), MAIN_KB)
     run_long(chat, f"Убираю {ip}…", job)
 
@@ -1615,7 +1615,7 @@ def upd_callback(chat, data):
                 return
             with open(UPD_FLAG, "w") as f:
                 f.write(f"{chat} {VERSION}\n")
-            send(chat, "📦 Скачала. Перезапускаю бота…")
+            send(chat, "📦 Скачал. Перезапускаю бота…")
             subprocess.run(["systemd-run", "--on-active=2", "--unit=kombain-bot-update", "--collect",
                             "systemctl", "restart", "kombain-bot"], capture_output=True)
         run_long(chat, "Обновляю Комбайн…", job)
@@ -1632,7 +1632,7 @@ def upd_report():
     if old == VERSION:
         send(int(chat), f"✅ Готово. Версия та же — <b>{VERSION}</b>, обновлять было нечего.", MAIN_KB)
     else:
-        send(int(chat), f"✅ Обновилась: <b>{old} → {VERSION}</b>.", MAIN_KB)
+        send(int(chat), f"✅ Обновился: <b>{old} → {VERSION}</b>.", MAIN_KB)
 
 
 HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
@@ -1740,7 +1740,7 @@ def on_callback(q):
     elif data.startswith("probe:forget:"):
         host, _, port = data[len("probe:forget:"):].rpartition(":")
         forget_hostkey(host, port or "22")
-        send(chat, f"🔑 Старый ключ <code>{esc(host)}</code> забыла. Проверь сервер заново — запомню новый.",
+        send(chat, f"🔑 Старый ключ <code>{esc(host)}</code> забыл. Проверь сервер заново — запомню новый.",
              inline([btn("➕ Новый сервер — проверить", "probe:ask")]))
     elif data.startswith("srv:"):
         srv_callback(chat, data)

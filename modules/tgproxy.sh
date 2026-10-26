@@ -93,11 +93,11 @@ tgp_core() {
     return 1
   fi
   local owner; owner=$(port_owner "$TGP_PORT" tcp)
-  [ -z "$owner" ] || { err "Порт $TGP_PORT уже занят программой $owner. Ничего не меняла."; return 1; }
+  [ -z "$owner" ] || { err "Порт $TGP_PORT уже занят программой $owner. Ничего не менял."; return 1; }
   tgp_get_bin || return 1
 
   local ip; ip=$(server_ip)
-  [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { err "Не смогла узнать внешний IP сервера."; return 1; }
+  [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { err "Не смог узнать внешний IP сервера."; return 1; }
   local secret; secret=$("$TGP_BIN" generate-secret --hex "$TGP_FRONT")
   [[ "$secret" =~ ^ee([0-9a-f]{2})+$ ]] || { err "MTProxy выдал странный ключ. Не ставлю."; return 1; }
 

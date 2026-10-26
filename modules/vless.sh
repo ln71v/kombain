@@ -154,7 +154,7 @@ vls_restart() {
   systemctl restart kombain-xray; sleep 1
   vls_running && return 0
   err "Xray не запустился. Подробности: journalctl -u kombain-xray -n 30"
-  if [ -f "$VLS_CONF.bak" ]; then cp -a "$VLS_CONF.bak" "$VLS_CONF"; systemctl restart kombain-xray; warn "Вернула прошлый конфиг"; fi
+  if [ -f "$VLS_CONF.bak" ]; then cp -a "$VLS_CONF.bak" "$VLS_CONF"; systemctl restart kombain-xray; warn "Вернул прошлый конфиг"; fi
   return 1
 }
 
@@ -176,7 +176,7 @@ EOF
 # Подключить Xray за движком: строка в карту SNI и перезагрузка nginx
 vls_nginx_map() {
   local dir="$KB_HOME/aiproxy/nginx/sni.d"
-  [ -d "$dir" ] || { err "Не нашла карту движка ($dir)."; return 1; }
+  [ -d "$dir" ] || { err "Не нашёл карту движка ($dir)."; return 1; }
   if grep -qiE "^\.?${VLS_SNI//./\\.}\b" "$KB_SRC/data/ai-domains.txt" 2>/dev/null; then
     err "Маска $VLS_SNI есть в списке нейронок — движок отправит её не туда. Выбери другую."; return 1
   fi
@@ -192,7 +192,7 @@ vls_go_behind() {
   vls_load_env
   [ "$VLS_MODE" = "behind" ] && return 0
   [ -z "$(port_owner "$VLS_INNER" tcp)" ] \
-    || { err "Порт $VLS_INNER занят: $(port_owner "$VLS_INNER" tcp) — VLESS увести за движок некуда, ничего не трогала."; return 1; }
+    || { err "Порт $VLS_INNER занят: $(port_owner "$VLS_INNER" tcp) — VLESS увести за движок некуда, ничего не трогал."; return 1; }
   step "Переношу VLESS за движок: 443 займёт nginx"
   VLS_MODE=behind
   if ! { vls_write_conf && vls_restart; }; then
@@ -228,7 +228,7 @@ vls_go_direct() {
   VLS_MODE=direct
   if ! { vls_write_conf && vls_restart; }; then
     VLS_MODE=behind   # не вышло — режим не меняем, следующий go-direct попробует снова
-    err "Xray не перезапустился на 443 — режим оставила прежним, повтори после исправления."
+    err "Xray не перезапустился на 443 — режим оставил прежним, повтори после исправления."
     return 1
   fi
   vls_save_env
@@ -257,7 +257,7 @@ vls_install_core() {
   VLS_SID=$(openssl rand -hex 8)
   VLS_SNI="${KB_VLS_SNI:-$VLS_SNI_DEFAULT}"
   VLS_ENDPOINT="${KB_SERVER_IP:-$(server_ip)}"
-  [ -n "$VLS_ENDPOINT" ] || { err "Не узнала внешний IP сервера."; return 1; }
+  [ -n "$VLS_ENDPOINT" ] || { err "Не узнал внешний IP сервера."; return 1; }
 
   mkdir -p "$VLS_DIR"; chmod 700 "$VLS_DIR"
   [ -f "$VLS_DIR/clients.json" ] || echo '[]' >"$VLS_DIR/clients.json"
@@ -503,7 +503,7 @@ vls_domain_on() {
   if ! { vls_write_conf && vls_restart && { [ "$VLS_MODE" != "behind" ] || vls_nginx_map; }; }; then
     printf '%s\n' "$old_env" >"$VLS_ENV"; vls_load_env; vls_write_conf && vls_restart
     [ "$VLS_MODE" = "behind" ] && vls_nginx_map >/dev/null 2>&1
-    err "Не переключилось — вернула как было."; return 1
+    err "Не переключилось — вернул как было."; return 1
   fi
   sleep 1
   if vls_site_check "$host" 443; then ok "Снаружи на 443 — твой сайт с настоящим сертификатом"
@@ -522,7 +522,7 @@ vls_domain_off() {
   vls_write_conf && vls_restart || return 1
   if [ "$VLS_MODE" = "behind" ]; then vls_nginx_map || return 1; fi
   systemctl disable --now kombain-site >/dev/null 2>&1
-  ok "VLESS снова на маске $VLS_SNI. Сертификат оставила — пригодится, если вернёшься."
+  ok "VLESS снова на маске $VLS_SNI. Сертификат оставил — пригодится, если вернёшься."
   warn "Ключи у всех устройств поменялись — пришли каждому новый QR."
 }
 
