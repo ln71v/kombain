@@ -45,6 +45,8 @@ func main() {
 	w.SetSize(720, 520, webview2.HintFixed)
 	a := newInstaller()
 	defer a.close()
+	cleanupOld()
+	upd := &exeUpdater{}
 	bindings := []struct {
 		name string
 		fn   interface{}
@@ -72,6 +74,8 @@ func main() {
 			return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 		}},
 		{"readClipboard", readClipboard},
+		{"exeUpdateCheck", upd.check},
+		{"exeUpdateInstall", func() error { return upd.install(func() { w.Dispatch(func() { w.Terminate() }) }) }},
 		{"appVersion", func() (string, error) { return version, nil }},
 		{"closeWindow", func() error { w.Dispatch(func() { w.Terminate() }); return nil }},
 	}
