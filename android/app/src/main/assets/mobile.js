@@ -72,7 +72,8 @@
         s = s || {};
         if (s.state === 'available') { setUpdate('Вышла новая версия Комбайна.', true); watching = false; return; }
         if (s.state === 'downloading') setUpdate('Качаю новую версию…', false);
-        if (s.state === 'installing') { setUpdate('Открыл установку — жми «Обновить».', false); watching = false; return; }
+        // Ждём ответа Android: «Отмена» вернёт available — кнопка появится снова.
+        if (s.state === 'installing') { setUpdate('Открыл установку — жми «Обновить».', false); if (++tries < 400) setTimeout(tick, 1500); else watching = false; return; }
         if (s.state === 'permission') { setUpdate('Разреши Комбайну ставить обновления: в открывшемся окне включи переключатель, вернись и жми «Обновить» ещё раз.', true); watching = false; return; }
         if (s.state === 'error') { setUpdate(s.message || 'Не получилось обновиться. Попробуй позже.', true); watching = false; return; }
         if (s.state === 'none' && tries > 0) { watching = false; return; }
@@ -108,5 +109,7 @@
 
     // Проверка новой версии — в фоне, окно не ждёт.
     call('updateCheck', []).then(watchUpdate).catch(function () {});
+    // Вернулся в Комбайн из окна установки — сверяем, чем кончилось.
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) watchUpdate(); });
   });
 })();

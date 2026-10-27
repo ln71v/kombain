@@ -500,3 +500,29 @@ func TestInstallReconnects(t *testing.T) {
 		t.Fatal("после закрытия пароль остался в памяти")
 	}
 }
+
+// Связь пропала и войти заново не вышло: «Проверить ещё раз» не должно ронять программу.
+func TestRetryWaitWithoutConnection(t *testing.T) {
+	a := newInstaller()
+	defer a.close()
+	a.mu.Lock()
+	a.host, a.user, a.pass = "127.0.0.1:1", "root", "x" // сюда не подключиться
+	a.state.Code = "012345"
+	a.state.Phase = "wait-error"
+	a.mu.Unlock()
+	for i := 0; i < 2; i++ {
+		if err := a.retryWait(); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) && a.snapshot().Phase == "waiting" {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if s := a.snapshot(); s.Phase != "wait-error" {
+			t.Fatalf("ждал wait-error, а тут %q", s.Phase)
+		}
+	}
+	if _, err := run(nil, "true", "", nil); err == nil {
+		t.Fatal("run без соединения должен вернуть ошибку")
+	}
+}

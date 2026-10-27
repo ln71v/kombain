@@ -309,6 +309,9 @@ func runTimeout(c *ssh.Client, cmd string, log io.Writer, limit time.Duration) (
 
 // stdout остаётся протоколом JSON, stderr — раскрываемым журналом.
 func run(c *ssh.Client, cmd, stdin string, log io.Writer) (string, error) {
+	if c == nil {
+		return "", errLost
+	}
 	s, err := c.NewSession()
 	if err != nil {
 		return "", err
@@ -460,9 +463,12 @@ func (a *installer) waitOwner(c *ssh.Client, g uint64) {
 		if !alive {
 			return
 		}
-		if nc, e := a.alive(g, nil); e == nil {
-			c = nc
+		nc, e := a.alive(g, nil)
+		if e != nil {
+			a.finish(g, "wait-error", "Связь с сервером оборвалась. Код сохранился на сервере — отправь его боту, потом нажми «Проверить ещё раз».")
+			return
 		}
+		c = nc
 		owner, err := run(c, ownerCommand, "", nil)
 		if err == nil && owner != "" && owner != "0" {
 			a.finish(g, "done", "")
