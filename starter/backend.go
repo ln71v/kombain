@@ -222,7 +222,7 @@ func (a *installer) trustHost() error {
 		return errors.New("Подожди, выполняю предыдущий шаг.")
 	}
 	if host == "" || fp == "" {
-		return errors.New("Нечего подтверждать — нажми «Войти» ещё раз.")
+		return errors.New("Нечего подтверждать — нажми «Подключиться» ещё раз.")
 	}
 	return a.known.set(host, fp)
 }

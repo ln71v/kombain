@@ -39,9 +39,9 @@ public class MainActivity extends Activity {
     private static final Pattern PROXY_TG = Pattern.compile(
             "^tg://proxy\\?server=[0-9.]{7,15}&port=[0-9]{2,5}&secret=ee[0-9a-f]{20,200}$");
     private static final Pattern BOT_NAME = Pattern.compile("^[A-Za-z0-9_]{5,32}$");
-    // Внешние ссылки из окна — только эти: Telegram-чат по имени и страница Комбайна на GitHub.
+    // Внешние ссылки из окна — только эти: Telegram-чат по имени, страница Комбайна на GitHub и сайты хостеров из списка.
     private static final Pattern LINK_OK = Pattern.compile(
-            "^https://t\\.me/[A-Za-z0-9_]{5,32}$|^https://github\\.com/ln71v/kombain(/releases)?$");
+            "^https://t\\.me/[A-Za-z0-9_]{5,32}$|^https://github\\.com/ln71v/kombain(/releases)?$|^https://(adminvps\\.ru|hip\\.hosting|eurobyte\\.ru|cloudvps\\.by|mnogoweb\\.ru|vdsina\\.ru|waicore\\.com)$");
     static final String ACTION_INSTALLED = "io.github.ln71v.kombain.INSTALLED";
 
     private WebView web;
