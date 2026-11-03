@@ -167,7 +167,12 @@ def tag_markup(markup):
         return markup
     tail = "~" + srv_tag()
     rows = []
-    for row in markup["inline_keyboard"]:
+    src = list(markup["inline_keyboard"])
+    # Под каждым меню — «🏠 Домой» (сброс шага и главное меню), если его там ещё нет
+    # и это не вопрос «введи имя» с «Отменой» — там Отмена и так возвращает домой.
+    if src and not any(b.get("callback_data") in FREE_CB for r in src for b in r):
+        src.append([HOME_BTN])
+    for row in src:
         new = []
         for b in row:
             d = b.get("callback_data")
@@ -192,6 +197,7 @@ def inline(*rows):
 
 
 CANCEL = [btn("✖️ Отмена", "cancel")]
+HOME_BTN = btn("🏠 Домой", "home")
 TO_SAFE = [btn("🔐 Назад в сейф", "safe:open")]
 
 
@@ -873,7 +879,7 @@ def probe_pass(chat, text, msg_id):
 
     def job():
         ok, report = probe_run(host, port, password)
-        rows = [[btn("🔁 Проверить ещё раз", "probe:ask")], [btn("🏠 Меню", "home")]]
+        rows = [[btn("🔁 Проверить ещё раз", "probe:ask")], [HOME_BTN]]
         if "изменился" in report and not ok:
             rows.insert(0, [btn("🔑 Сервер переустановлен — забыть старый ключ", f"probe:forget:{host}:{port}")])
         if ok:
@@ -1070,12 +1076,12 @@ def srv_save_run(chat, ip, port, password):
         PW_CACHE.pop(ip, None)
         if hostkey_changed(r):
             send(chat, hostkey_text(ip), inline([btn("🔑 Сервер переустановлен — забыть старый ключ",
-                                                     f"probe:forget:{ip}:{port}")], [btn("🏠 Меню", "home")]))
+                                                     f"probe:forget:{ip}:{port}")], [HOME_BTN]))
             return
         if r is None or "KEY_OK" not in r.stdout:
             why = "неверный пароль" if r is not None and r.returncode == 5 else "не зашёл"
             send(chat, f"❌ Не смог оставить <code>{ip}</code>: {why}.",
-                 inline([btn("🔁 Ещё раз", f"srv:save:{ip}")], [btn("🏠 Меню", "home")]))
+                 inline([btn("🔁 Ещё раз", f"srv:save:{ip}")], [HOME_BTN]))
             return
         d = PROBE_INFO.get(ip, {})
         name = " ".join(x for x in (d.get("COUNTRY"), d.get("CITY")) if x) or ip
@@ -1726,6 +1732,11 @@ def on_callback(q):
         send(chat, "Отменено.", MAIN_KB)
     elif data == "home":
         state.pop(chat, None)
+        try:   # убрать кнопки со старого меню, чтобы не путаться
+            call("editMessageReplyMarkup", chat_id=chat, message_id=q["message"]["message_id"],
+                 reply_markup={"inline_keyboard": []})
+        except Exception:
+            pass
         send(chat, f"🏠 Главное меню · Комбайн {VERSION}\nВыбирай кнопкой внизу 👇", MAIN_KB)
     elif data.startswith("safe:"):
         safe_callback(chat, data)
