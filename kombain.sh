@@ -61,6 +61,12 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/modules/tgusers.sh"
 # shellcheck source=modules/tgweb.sh
 . "$KB_SRC/modules/tgweb.sh"
+# shellcheck source=modules/tgguard.sh
+. "$KB_SRC/modules/tgguard.sh"
+
+# Сторож Telegram-прокси: при каждом запуске (в т.ч. сразу после обновления) — ставим/обновляем/убираем.
+# Тихо: вывод cli читает бот.
+tgg_sync >/dev/null 2>&1
 
 # Режим для бота: kombain cli <модуль> <команда> [аргументы]
 if [ "${1:-}" = "cli" ]; then
@@ -76,6 +82,7 @@ if [ "${1:-}" = "cli" ]; then
     warp)    warp_cli "$@"; exit $? ;;
     tgusers) tgu_cli "$@"; exit $? ;;
     tgweb)   tgw_cli "$@"; exit $? ;;
+    tgguard) tgg_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi

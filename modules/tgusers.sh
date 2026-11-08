@@ -232,6 +232,7 @@ EOF
   fw_register tgusers "$port/tcp"
   if grep -q '^Status: active' <<<"$(ufw status 2>/dev/null)"; then fw_apply; fi
   ok "Telegram-прокси по именам работает на порту $port. Первый ключ — admin (твой)."
+  tgg_sync >&2
 }
 
 tgu_remove_core() {
@@ -246,6 +247,7 @@ tgu_remove_core() {
   userdel kombain-telemt >/dev/null 2>&1
   fw_unregister tgusers
   ok "Telegram-прокси по именам удалён"
+  tgg_sync >&2
 }
 
 # ───────────────────────── люди ─────────────────────────

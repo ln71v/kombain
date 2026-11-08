@@ -250,6 +250,7 @@ tgw_install_core() {
   if [ "$code" = "200" ]; then ok "WEB-прокси отвечает через 443 ($host)"
   else warn "Через 443 ответ $code — посмотри «Состояние»."; fi
   ok "Telegram WEB-прокси готов"
+  tgg_sync >&2
 }
 
 tgw_status() {
@@ -280,6 +281,7 @@ tgw_remove_core() {
   rm -rf "${TGW_CONF:?}" /etc/mtproxy /opt/MTProxy "${TGW_SRC:?}" /srv/tproxy-site
   rm -f /usr/local/bin/tproxy-server /usr/local/sbin/refresh-mtproxy-config
   ok "WEB-прокси удалён${h:+ ($h)}. Сертификат и запись в Cloudflare оставил."
+  tgg_sync >&2
 }
 
 # kombain cli tgweb <команда>

@@ -68,7 +68,7 @@ ProtectSystem=strict
 ProtectHome=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 UMask=0077
-LimitNOFILE=8192
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
@@ -80,7 +80,7 @@ tgp_core() {
   ensure_pkgs curl tar jq qrencode || return 1
   if tgp_installed; then
     # Уже работает (свой или поставленный раньше руками) — ничего не трогаем
-    tgp_running && { ok "Telegram-прокси уже стоит и работает"; return 0; }
+    tgp_running && { ok "Telegram-прокси уже стоит и работает"; tgg_sync >&2; return 0; }
     # Не работает — чиним файл службы (старые установки с %d на Ubuntu 22.04)
     backup_file "$TGP_UNIT"
     tgp_unit
@@ -88,7 +88,7 @@ tgp_core() {
     systemctl reset-failed telegram-mtg >/dev/null 2>&1
     systemctl enable --now telegram-mtg >/dev/null 2>&1
     sleep 2
-    tgp_running && { ok "Telegram-прокси уже стоит и работает"; return 0; }
+    tgp_running && { ok "Telegram-прокси уже стоит и работает"; tgg_sync >&2; return 0; }
     err "Telegram-прокси стоит, но не запускается. Логи: journalctl -u telegram-mtg -n 30"
     return 1
   fi
@@ -109,7 +109,7 @@ secret = "$secret"
 bind-to = "0.0.0.0:$TGP_PORT"
 public-ipv4 = "$ip"
 prefer-ip = "only-ipv4"
-concurrency = 512
+concurrency = 4096
 
 [defense.blocklist]
 enabled = false
@@ -129,6 +129,7 @@ EOF
   for _ in $(seq 1 10); do tgp_running && break; sleep 1; done
   tgp_running || { err "Прокси не запустился. Логи: journalctl -u telegram-mtg -n 30"; return 1; }
   ok "Telegram-прокси работает на порту $TGP_PORT"
+  tgg_sync >&2
 }
 
 tgp_qr_svg() { qrencode -t SVG -m 2 -o - "$(tgp_link_tg)" 2>/dev/null; }
@@ -166,6 +167,7 @@ tgp_remove_core() {
   rm -rf "$TGP_DIR"
   fw_unregister tgproxy
   ok "Telegram-прокси удалён"
+  tgg_sync >&2
 }
 
 tgp_menu() {
