@@ -59,3 +59,15 @@ func TestDataDirAndTrust(t *testing.T) {
 		t.Fatal("после перезапуска отпечаток забыт")
 	}
 }
+
+func TestBridgeIPCheck(t *testing.T) {
+	if r := call(t, "ipCheckStart", "не-ip"); r.Error == "" {
+		t.Fatal("ждала ошибку про IP")
+	}
+	if r := call(t, "ipCheckStart", "192.168.1.1"); r.Error == "" {
+		t.Fatal("домашний адрес проверять не должна")
+	}
+	if r := call(t, "ipCheckState"); r.Error != "" || r.Result.(map[string]interface{})["running"] != false {
+		t.Fatalf("state: %+v", r)
+	}
+}

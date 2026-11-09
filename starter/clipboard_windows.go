@@ -49,4 +49,4 @@ func readClipboard() (string, error) {
 }
 
 // Внешние ссылки из окна — только Telegram-чат по имени, страница Комбайна на GitHub и сайты хостеров из списка.
-var linkOK = regexp.MustCompile(`^https://t\.me/[A-Za-z0-9_]{5,32}$|^https://github\.com/ln71v/kombain(/releases)?$|^https://(adminvps\.ru|hip\.hosting|eurobyte\.ru|cloudvps\.by|mnogoweb\.ru|vdsina\.ru|waicore\.com)$`)
+var linkOK = regexp.MustCompile(`^https://t\.me/[A-Za-z0-9_]{5,32}$|^https://github\.com/ln71v/kombain(/releases)?$|^https://(adminvps\.ru|fornex\.com|hip\.hosting|cloudvps\.by)$`)

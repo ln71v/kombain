@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private static final Pattern BOT_NAME = Pattern.compile("^[A-Za-z0-9_]{5,32}$");
     // Внешние ссылки из окна — только эти: Telegram-чат по имени, страница Комбайна на GitHub и сайты хостеров из списка.
     private static final Pattern LINK_OK = Pattern.compile(
-            "^https://t\\.me/[A-Za-z0-9_]{5,32}$|^https://github\\.com/ln71v/kombain(/releases)?$|^https://(adminvps\\.ru|hip\\.hosting|eurobyte\\.ru|cloudvps\\.by|mnogoweb\\.ru|vdsina\\.ru|waicore\\.com)$");
+            "^https://t\\.me/[A-Za-z0-9_]{5,32}$|^https://github\\.com/ln71v/kombain(/releases)?$|^https://(adminvps\\.ru|fornex\\.com|hip\\.hosting|cloudvps\\.by)$");
     static final String ACTION_INSTALLED = "io.github.ln71v.kombain.INSTALLED";
 
     private WebView web;

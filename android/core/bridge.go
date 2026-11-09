@@ -54,6 +54,10 @@ func Call(name, args string) string {
 		res, err = a.proxyLink()
 	case "trustHost":
 		err = a.trustHost()
+	case "ipCheckStart":
+		err = ipCheckStart(arg(0))
+	case "ipCheckState":
+		res = ipCheckState()
 	default:
 		err = errors.New("Неизвестная команда.")
 	}

@@ -28,7 +28,6 @@ button{transition:filter .12s,transform .12s}button:not(:disabled):active{filter
 #exe-upd{position:fixed;top:58px;right:16px;width:300px;z-index:50;background:#E3F1EC;color:#0A4F44;border:1.5px solid #0E6B5C;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
 #exe-upd .row{display:flex;gap:8px}#exe-upd button{height:34px;padding:0 14px!important;font-size:13px}
 #exe-upd-x{position:absolute;top:4px;right:6px;border:0;background:none;color:#5A6470;font-size:16px;height:auto!important;padding:2px 4px!important}
-.host-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .host-link{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border:1.5px solid #0E6B5C;border-radius:10px;background:#FFF;color:#0E6B5C;font-weight:700;font-size:15px;text-decoration:none;cursor:pointer}
 .host-link:active{filter:brightness(.9)}
 .calm{margin:0;font-size:14px;line-height:1.5;color:#0A4F44;background:#E3F1EC;border-radius:10px;padding:10px 14px}
@@ -51,6 +50,7 @@ button{transition:filter .12s,transform .12s}button:not(:disabled):active{filter
 .tgc .bar{background:#FFF;display:flex;align-items:center;gap:6px;padding:5px 7px;color:#8A8F95}
 .tgc .bar .f{flex:1;color:#111}.tgc .snd{width:22px;height:22px;border-radius:11px;background:#3E9BE0;color:#FFF;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #FFF,0 0 0 4px #E0352B;font-size:11px}
 .bf-cheat summary{margin-top:2px;list-style:none;display:flex;align-items:center;justify-content:center;text-align:center;min-height:46px;padding:8px 14px;border:1.5px solid #0E6B5C;border-radius:10px;background:#E3F1EC;color:#0A4F44;font-size:15px;font-weight:700;cursor:pointer}.bf-cheat summary::-webkit-details-marker{display:none}.bf-cheat summary:active{filter:brightness(.92)}.bf-cheat .when-open{display:none}.bf-cheat[open] .when-open{display:inline}.bf-cheat[open] .when-closed{display:none}
+.host-rows{display:flex;flex-direction:column;gap:6px}.host-row{display:grid;grid-template-columns:150px auto auto 1fr;align-items:center;gap:6px}.host-row .host-link{min-height:38px;font-size:14px}.chip{display:inline-flex;align-items:center;justify-content:center;height:26px;padding:0 9px;border-radius:13px;font-size:12px;font-weight:700;white-space:nowrap}.chip.ok{background:#E3F1EC;color:#0A4F44}.chip.bad{background:#FDE3E1;color:#B3261E}.chip.unk{background:#F3F1EC;color:#5A6470}.chip.done{background:#FFF;color:#0A4F44;border:1px solid #0E6B5C;justify-self:start}.host-row .chip.unk:last-child{justify-self:start}.ipc{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:2px solid #1E6FD9;border-radius:12px;background:#EEF4FD}.ipc-head{font-family:Unbounded,sans-serif;font-weight:700;font-size:16px;color:#14448A}.ipc-sub{font-size:13px;line-height:1.45;color:#2D3B4E}.ipc-row{display:flex;gap:8px;align-items:center}.ipc-row .paste-wrap{flex:1;display:block}#ipc-go{background:#1E6FD9;flex-shrink:0}.ipc-res{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:10px;border:2px solid;font-size:14px;line-height:1.45}.ipc-res.green{background:#E3F1EC;border-color:#0E6B5C;color:#0A4F44}.ipc-res.red{background:#FDE3E1;border-color:#B3261E;color:#7A1A14}.ipc-res.yellow{background:#FDF1E4;border-color:#D98A1F;color:#7A3D08}.ipc-res.wait{background:#FFF;border-color:#D9D5CC;color:#5A6470}.ipc-title{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;line-height:1.25}.ipc-details{font-size:12px;opacity:.85;display:flex;flex-direction:column;gap:2px}.srv-check{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:2px solid #1E6FD9;border-radius:12px;background:#EEF4FD;font-size:14px;line-height:1.45;color:#2D3B4E}.srv-check button{height:40px;padding:0 16px;border:0;border-radius:10px;background:#1E6FD9;color:#FFF;font:700 14px Manrope,sans-serif;flex-shrink:0}
 </style></head><body><section class="screen" id="screen-1"><div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBFAF7; color: #18212B; font-family: 'Manrope', sans-serif; border: 1px solid #E4E1DA; border-radius: 12px; overflow: hidden">
   <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #E4E1DA; background: #FFFFFF">
     <div style="display: flex; align-items: center; gap: 10px">
@@ -250,6 +250,7 @@ button{transition:filter .12s,transform .12s}button:not(:disabled):active{filter
       <span>• Ubuntu 22 или 24, от 1 ГБ памяти</span>
       <span>• Хостер пришлёт IP и пароль — держи их под рукой</span>
     </div>
+    <div class="srv-check"><span><b>🔎 Купил — сначала проверь IP.</b><br>Прямо в Комбайне: открывается ли сервер из России. Красное — меняй IP, пока не поздно.</span><button type="button" id="go-ipc">Проверить IP</button></div>
   </div>
   <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
     <button style="height: 44px; padding: 0 18px; border: 1px solid #D9D5CC; border-radius: 10px; background: #FFFFFF; color: #5A6470; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500">← Назад</button>
@@ -430,8 +431,9 @@ button{transition:filter .12s,transform .12s}button:not(:disabled):active{filter
   </div>
   <div style="flex-grow: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 26px 44px 12px">
     <h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 24px; line-height: 1.2">Где взять сервер</h1>
-    <p style="margin: 0; font-size: 14px; color: #5A6470">Тыкай любой. Разница — в цене и удобстве кабинета. Не понравится — потом перейдёшь к другому.</p>
-    <div class="host-list"><a class="host-link" data-open="https://adminvps.ru">AdminVPS ↗</a><a class="host-link" data-open="https://hip.hosting">HIP-Hosting ↗</a><a class="host-link" data-open="https://eurobyte.ru">Eurobyte ↗</a><a class="host-link" data-open="https://cloudvps.by">CloudVPS ↗</a><a class="host-link" data-open="https://mnogoweb.ru">Mnogoweb ↗</a><a class="host-link" data-open="https://vdsina.ru">VDSina ↗</a><a class="host-link" data-open="https://waicore.com">WAICORE ↗</a></div>
+    <p style="margin: 0; font-size: 14px; color: #5A6470">Нейронки пускают не всех. Тут — что проверено вживую. Купил — проверь IP ниже, прямо здесь ↓</p>
+    <div class="host-rows"><div class="host-row"><a class="host-link" data-open="https://adminvps.ru">AdminVPS ↗</a><span class="chip ok">Gemini ✅</span><span class="chip ok">ChatGPT, Claude ✅</span><span class="chip done">проверено</span></div><div class="host-row"><a class="host-link" data-open="https://fornex.com">Fornex ↗</a><span class="chip ok">Gemini ✅</span><span class="chip ok">ChatGPT, Claude ✅</span><span class="chip done">проверено</span></div><div class="host-row"><a class="host-link" data-open="https://hip.hosting">HIP-Hosting ↗</a><span class="chip bad">Gemini ❌ не работает</span><span class="chip ok">ChatGPT, Claude ✅</span><span class="chip done">проверено</span></div><div class="host-row"><a class="host-link" data-open="https://cloudvps.by">CloudVPS ↗</a><span class="chip unk">Gemini ?</span><span class="chip unk">ChatGPT, Claude ?</span><span class="chip unk">не проверено</span></div></div>
+    <div id="ipc" class="ipc"><div class="ipc-head">🔎 Купил сервер? Проверь IP прямо здесь</div><div class="ipc-sub">Никуда лезть не надо: вставь IP из письма хостера и жми «Проверить». Покажу, открывается ли сервер из России. VPN на время проверки выключи — иначе проверка соврёт.</div><div class="ipc-row"><input id="ipc-ip" placeholder="IP сервера, например 203.0.113.10" spellcheck="false" autocomplete="off" inputmode="url"><button type="button" class="primary" id="ipc-go">Проверить</button></div><div id="ipc-err" class="message" role="status" hidden></div><div id="ipc-res" class="ipc-res" role="status" hidden><div id="ipc-title" class="ipc-title"></div><div id="ipc-advice"></div><div id="ipc-details" class="ipc-details"></div></div></div>
     <div style="padding: 10px 14px; background: #FDF1E4; color: #9A4A0A; border-radius: 10px; font-size: 14px; line-height: 1.45">⚠️ После оплаты сразу запиши IP и пароль сервера — хостер может потом их не показать.</div>
   </div>
   <div style="height: 76px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 44px">
@@ -469,12 +471,40 @@ $('consent').onchange=()=>{$('start').disabled=!$('consent').checked;};
 document.querySelectorAll('a').forEach(a=>a.onclick=e=>{e.preventDefault();const u=a.dataset.open||'';if(u)bridge('openLink',u).catch(()=>{});});
 $('bot-name').onclick=()=>{const n=$('bot-name').textContent.replace(/^@/,'').trim();if(n)bridge('openLink','https://t.me/'+n).catch(()=>{});};
 // Кнопка «Вставить» в полях: тапнул в поле — кнопка загорелась — нажал.
-['host','password','token'].forEach(id=>{const inp=$(id),w=document.createElement('span');w.className='paste-wrap';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);
+['host','password','token','ipc-ip'].forEach(id=>{const inp=$(id),w=document.createElement('span');w.className='paste-wrap';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);
  const b=document.createElement('button');b.type='button';b.className='paste-btn';b.textContent='Вставить';b.tabIndex=-1;w.appendChild(b);
  b.onmousedown=e=>e.preventDefault();
  b.onclick=async()=>{let t='';try{t=await bridge('readClipboard');}catch(e){}t=String(t||'').trim();if(id!=='password')t=t.replace(/\s+/g,'');
   if(!t){b.textContent='Буфер пуст';setTimeout(()=>b.textContent='Вставить',1500);inp.focus();return;}inp.value=t;t='';inp.focus();};});
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(Number(b.dataset.go)));
+// Проверка IP прямо в окне: свой стук + узлы check-host в России. Зелёное — ставь, красное — меняй IP.
+$('go-ipc').onclick=()=>{show(13);$('ipc').scrollIntoView({block:'start'});$('ipc-ip').focus();};
+let ipcTimer=0;
+function ipcShow(st){
+ const r=$('ipc-res');r.hidden=false;
+ if(st.running){r.className='ipc-res wait';$('ipc-title').textContent='⏳ Проверяю…';$('ipc-advice').textContent=st.stage||'';$('ipc-details').textContent='';return;}
+ const icon={green:'🟢',red:'🔴',yellow:'🟡'}[st.verdict]||'';
+ r.className='ipc-res '+(st.verdict||'wait');$('ipc-title').textContent=icon+' '+st.title;
+ let adv=st.advice;
+ if(st.verdict==='green'){$('host').value=$('ipc-ip').value.trim();adv+=' IP уже вписал в окно входа.';}
+ $('ipc-advice').textContent=adv;
+ $('ipc-details').replaceChildren(...[st.address?'Проверял: '+st.address:'',st.self,st.russia].filter(Boolean).map(t=>{const d=document.createElement('div');d.textContent=t;return d;}));
+ r.scrollIntoView({block:'nearest'});
+}
+async function ipcPoll(){
+ let st;try{st=await bridge('ipCheckState');}catch(e){st=null;}
+ if(st&&st.running){ipcShow(st);ipcTimer=setTimeout(ipcPoll,700);return;}
+ $('ipc-go').disabled=false;$('ipc-go').textContent='Проверить';
+ if(st&&st.verdict)ipcShow(st);
+}
+$('ipc-go').onclick=async()=>{
+ message('ipc-err','');clearTimeout(ipcTimer);
+ try{await bridge('ipCheckStart',$('ipc-ip').value);}
+ catch(e){message('ipc-err',errorText(e));return;}
+ $('ipc-go').disabled=true;$('ipc-go').textContent='Проверяю…';ipcShow({running:true,stage:'Стучусь на сервер…'});ipcPoll();
+};
+$('ipc-ip').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();if(!$('ipc-go').disabled)$('ipc-go').onclick();}};
+
 $('login-form').onsubmit=async e=>{
  e.preventDefault();if(localBusy)return;localBusy=true;message('login-error','');$('login-submit').disabled=true;
  let pass=$('password').value;$('password').value='';

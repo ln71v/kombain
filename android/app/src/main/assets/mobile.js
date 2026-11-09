@@ -15,7 +15,7 @@
     });
   }
   ['loginServer', 'trustHost', 'installBot', 'installerState', 'retryOwner', 'installProxy',
-    'needLogin', 'openProxy', 'appVersion', 'closeWindow', 'openLink', 'readClipboard'].forEach(function (n) {
+    'needLogin', 'openProxy', 'appVersion', 'closeWindow', 'openLink', 'readClipboard', 'ipCheckStart', 'ipCheckState'].forEach(function (n) {
     window[n] = function () { return call(n, Array.prototype.slice.call(arguments).map(String)); };
   });
 

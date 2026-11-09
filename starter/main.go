@@ -58,6 +58,8 @@ func main() {
 		{"retryOwner", a.retryWait},
 		{"installProxy", a.installProxy},
 		{"needLogin", func() (bool, error) { return a.needLogin(), nil }},
+		{"ipCheckStart", ipCheckStart},
+		{"ipCheckState", func() (IPCheck, error) { return ipCheckState(), nil }},
 		{"openProxy", func() error {
 			link, err := a.proxyLink()
 			if err != nil {
