@@ -157,12 +157,18 @@ func knockSelf(target string) string {
 	r := bufio.NewReaderSize(io.LimitReader(c, 8192), 8192)
 	for {
 		line, err := r.ReadString('\n')
-		if strings.HasPrefix(line, "SSH-") {
+		if err != nil {
+			return selfSilent // строка не дошла до конца — приветствия нет
+		}
+		if !strings.HasPrefix(line, "SSH-") {
+			continue // баннер перед приветствием — пропускаем
+		}
+		id := strings.TrimRight(line, "\r\n")
+		soft := strings.TrimPrefix(strings.TrimPrefix(id, "SSH-2.0-"), "SSH-1.99-")
+		if len(line) <= 255 && soft != id && soft != "" && soft[0] != ' ' && !strings.ContainsRune(id, 0) {
 			return selfOK
 		}
-		if err != nil {
-			return selfSilent
-		}
+		return selfSilent
 	}
 }
 

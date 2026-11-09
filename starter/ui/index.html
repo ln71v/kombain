@@ -504,12 +504,13 @@ async function ipcPoll(){
  if(st&&st.verdict)ipcShow(st);else $('ipc-res').hidden=true;
 }
 $('ipc-go').onclick=async()=>{
- message('ipc-err','');clearTimeout(ipcTimer);ipcFails=0;
+ if($('ipc-go').disabled)return;
+ message('ipc-err','');clearTimeout(ipcTimer);ipcFails=0;ipcBusy(true); // кнопку — сразу, до ответа: второй клик не пройдёт
  try{await bridge('ipCheckStart',$('ipc-ip').value);}
- catch(e){const t=errorText(e);if(!/Уже проверяю/.test(t)){message('ipc-err',t);return;}} // уже идёт — просто ждём её итог
- ipcBusy(true);ipcShow({running:true,stage:'Стучусь на сервер…'});ipcPoll();
+ catch(e){const t=errorText(e);if(!/Уже проверяю/.test(t)){ipcBusy(false);message('ipc-err',t);return;}} // уже идёт — просто ждём её итог
+ ipcShow({running:true,stage:'Стучусь на сервер…'});ipcPoll();
 };
-$('ipc-ip').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();if(!$('ipc-go').disabled)$('ipc-go').onclick();}};
+$('ipc-ip').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('ipc-go').onclick();}};
 
 $('login-form').onsubmit=async e=>{
  e.preventDefault();if(localBusy)return;localBusy=true;message('login-error','');$('login-submit').disabled=true;

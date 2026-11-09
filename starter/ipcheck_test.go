@@ -103,6 +103,11 @@ func TestKnockSelf(t *testing.T) {
 	if got := knockSelf(listen(t, "Welcome to this server\r\nSSH-2.0-OpenSSH_9.6\r\n")); got != selfOK {
 		t.Fatal("ssh с баннером:", got)
 	}
+	for _, partial := range []string{"SSH-", "SSH-2.0-OpenSSH", "SSH-1.5-old\r\n", "SSH-2.0-\r\n"} {
+		if got := knockSelf(listen(t, partial)); got != selfSilent {
+			t.Fatalf("неполное/неверное приветствие %q: %s", partial, got)
+		}
+	}
 	if got := knockSelf(listen(t, "")); got != selfSilent {
 		t.Fatal("тишина:", got)
 	}
