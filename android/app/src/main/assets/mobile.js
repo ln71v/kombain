@@ -70,7 +70,7 @@
     (function tick() {
       call('updateState', []).then(function (s) {
         s = s || {};
-        if (s.state === 'available') { setUpdate('Вышла новая версия Комбайна.', true); watching = false; return; }
+        if (s.state === 'available') { setUpdate('🔔 Вышла новая версия Комбайна — жми «Обновить», файл качать не надо.', true); watching = false; return; }
         if (s.state === 'downloading') setUpdate('Качаю новую версию…', false);
         // Ждём ответа Android: «Отмена» вернёт available — кнопка появится снова.
         if (s.state === 'installing') { setUpdate('Открыл установку — жми «Обновить».', false); if (++tries < 400) setTimeout(tick, 1500); else watching = false; return; }

@@ -25,9 +25,9 @@ button{transition:filter .12s,transform .12s}button:not(:disabled):active{filter
 .secondary,.screen button[style*="border: 1px solid #D9D5CC"]{border:1.5px solid #0E6B5C!important;color:#0E6B5C!important;font-weight:700!important}
 .kb-link{color:#1E6FD9;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .kb-link::after{content:" ↗";text-decoration:none;display:inline-block;margin-left:2px}
-#exe-upd{position:fixed;top:58px;right:16px;width:300px;z-index:50;background:#E3F1EC;color:#0A4F44;border:1.5px solid #0E6B5C;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+#exe-upd{position:fixed;top:56px;right:14px;width:310px;z-index:50;background:#F57C00;color:#FFF;border:0;border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.4;display:flex;flex-direction:column;gap:8px;box-shadow:0 6px 20px rgba(245,124,0,.45);animation:kbpulse 1.6s ease-in-out infinite}@keyframes kbpulse{0%,100%{box-shadow:0 6px 20px rgba(245,124,0,.45)}50%{box-shadow:0 6px 28px rgba(245,124,0,.85),0 0 0 4px rgba(245,124,0,.25)}}#exe-upd b{font-size:15px}#exe-upd .primary{background:#FFF;color:#C25E00}#exe-upd .secondary{background:transparent!important;color:#FFF!important;border-color:#FFF!important}#exe-upd-msg{background:rgba(0,0,0,.18);border-radius:8px;padding:6px 8px}
 #exe-upd .row{display:flex;gap:8px}#exe-upd button{height:34px;padding:0 14px!important;font-size:13px}
-#exe-upd-x{position:absolute;top:4px;right:6px;border:0;background:none;color:#5A6470;font-size:16px;height:auto!important;padding:2px 4px!important}
+#exe-upd-x{position:absolute;top:4px;right:6px;border:0;background:none;color:#FFF;font-size:16px;height:auto!important;padding:2px 4px!important}
 .host-link{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border:1.5px solid #0E6B5C;border-radius:10px;background:#FFF;color:#0E6B5C;font-weight:700;font-size:15px;text-decoration:none;cursor:pointer}
 .host-link:active{filter:brightness(.9)}
 .calm{margin:0;font-size:14px;line-height:1.5;color:#0A4F44;background:#E3F1EC;border-radius:10px;padding:10px 14px}
@@ -569,7 +569,7 @@ document.addEventListener('keydown',e=>{if(e.key==='F5'||e.key==='F12'||(e.ctrlK
 // Комп: вышла новая версия — плашка с кнопкой «Обновить» (сам скачает, проверит и перезапустится).
 if(typeof window.exeUpdateCheck==='function'){window.exeUpdateCheck().then(function(isNew){if(!isNew)return;
  var d=document.createElement('div');d.id='exe-upd';
- d.innerHTML='<button type="button" id="exe-upd-x" aria-label="Закрыть">×</button><b>Вышла новая версия Комбайна</b><div id="exe-upd-msg" hidden></div><div class="row"><button type="button" class="primary" id="exe-upd-go">Обновить</button><button type="button" class="secondary" id="exe-upd-dl" hidden>Скачать ↗</button></div>';
+ d.innerHTML='<button type="button" id="exe-upd-x" aria-label="Закрыть">×</button><b>🔔 Вышла новая версия Комбайна</b><span>Жми «Обновить» — скачаю и перезапущусь сам, искать файл не надо.</span><div id="exe-upd-msg" hidden></div><div class="row"><button type="button" class="primary" id="exe-upd-go">Обновить</button><button type="button" class="secondary" id="exe-upd-dl" hidden>Скачать ↗</button></div>';
  document.body.appendChild(d);
  $('exe-upd-x').onclick=function(){d.remove();};
  $('exe-upd-dl').onclick=function(){bridge('openLink','https://github.com/ln71v/kombain/releases').catch(function(){});};

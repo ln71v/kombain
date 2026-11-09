@@ -48,9 +48,11 @@ pre{height:140px}
 .paste-btn{height:36px!important;padding:0 14px!important;font-size:14px!important}
 
 /* Плашка «есть новая версия». */
-#kb-update{margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#E3F1EC;color:#0A4F44;font-size:14px;line-height:1.45;display:flex;flex-direction:column;gap:8px}
-#kb-update button{align-self:flex-start;min-height:44px}
-#kb-update small{color:#5A6470;font-size:12px;line-height:1.4}
+#kb-update{margin:0 0 14px;padding:14px 16px;border-radius:14px;background:#F57C00;color:#FFF;font-size:15px;line-height:1.45;display:flex;flex-direction:column;gap:10px;animation:kbpulse 1.6s ease-in-out infinite}
+@keyframes kbpulse{0%,100%{box-shadow:0 6px 18px rgba(245,124,0,.45)}50%{box-shadow:0 6px 26px rgba(245,124,0,.85),0 0 0 4px rgba(245,124,0,.25)}}
+#kb-update-text{font-weight:700;font-size:16px}
+#kb-update button{align-self:stretch;min-height:48px;background:#FFF!important;color:#C25E00!important;font-size:16px!important}
+#kb-update small{color:#FFF;opacity:.9;font-size:12px;line-height:1.4}
 
 /* Где взять сервер: хостер — строка, метки под ним; проверка IP — поле над кнопкой. */
 .host-row{display:flex!important;flex-wrap:wrap!important}
