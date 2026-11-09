@@ -84,6 +84,7 @@ func SetDataDir(dir string) {
 
 // Close рвёт соединение с сервером и начинает с чистого листа (приложение закрыли).
 func Close() {
+	ipCheckReset() // недоделанная проверка IP и адрес — тоже с чистого листа
 	instMu.Lock()
 	old := inst
 	inst = newInstaller()

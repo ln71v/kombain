@@ -458,7 +458,7 @@ INTRO.forEach((n,i)=>{
  else if(t==='← Назад'&&!b.dataset.go)b.onclick=()=>show(INTRO[i-1]);
  else if(['Дальше →','Сервер есть →'].includes(t))b.onclick=()=>show(INTRO[i+1]);
  else if(t==='Начать'){b.id='start';b.disabled=true;b.onclick=()=>{if($('consent').checked)show(8);};}
- else if(t==='Где купить?'){b.textContent='Сервера нет';b.onclick=()=>show(13);}
+ else if(t==='Где купить?'){b.textContent='Сервера нет';b.onclick=()=>{show(13);const m=$('screen-13').querySelector('[style*="overflow: auto"]');if(m)m.scrollTop=0;};}
  });
  // точки прогресса под новый порядок
  const dots=$('screen-'+n).querySelector('[aria-label^="Шаг"]');
@@ -479,29 +479,35 @@ $('bot-name').onclick=()=>{const n=$('bot-name').textContent.replace(/^@/,'').tr
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(Number(b.dataset.go)));
 // Проверка IP прямо в окне: свой стук + узлы check-host в России. Зелёное — ставь, красное — меняй IP.
 $('go-ipc').onclick=()=>{show(13);$('ipc').scrollIntoView({block:'start'});$('ipc-ip').focus();};
-let ipcTimer=0;
+let ipcTimer=0,ipcFails=0,autoHost='';
+function ipcBusy(on){$('ipc-go').disabled=on;$('ipc-go').textContent=on?'Проверяю…':'Проверить';$('ipc-ip').disabled=on;const pb=$('ipc-ip').parentNode.querySelector('.paste-btn');if(pb)pb.disabled=on;}
 function ipcShow(st){
  const r=$('ipc-res');r.hidden=false;
  if(st.running){r.className='ipc-res wait';$('ipc-title').textContent='⏳ Проверяю…';$('ipc-advice').textContent=st.stage||'';$('ipc-details').textContent='';return;}
  const icon={green:'🟢',red:'🔴',yellow:'🟡'}[st.verdict]||'';
  r.className='ipc-res '+(st.verdict||'wait');$('ipc-title').textContent=icon+' '+st.title;
  let adv=st.advice;
- if(st.verdict==='green'){$('host').value=$('ipc-ip').value.trim();adv+=' IP уже вписал в окно входа.';}
+ // В окно входа — именно проверенный адрес (не то, что сейчас в поле), и не поверх того, что человек вписал сам.
+ if(st.verdict==='green'){const a=String(st.address||'').replace(/:22$/,''),h=$('host').value.trim();
+  if(a&&(!h||h===autoHost)){$('host').value=a;autoHost=a;adv+=' Проверенный IP уже вписал в окно входа.';}}
  $('ipc-advice').textContent=adv;
  $('ipc-details').replaceChildren(...[st.address?'Проверял: '+st.address:'',st.self,st.russia].filter(Boolean).map(t=>{const d=document.createElement('div');d.textContent=t;return d;}));
  r.scrollIntoView({block:'nearest'});
 }
 async function ipcPoll(){
- let st;try{st=await bridge('ipCheckState');}catch(e){st=null;}
+ clearTimeout(ipcTimer);let st=null;
+ try{st=await bridge('ipCheckState');ipcFails=0;}
+ catch(e){if(++ipcFails<10){ipcTimer=setTimeout(ipcPoll,1500);return;}
+  ipcBusy(false);$('ipc-res').hidden=true;message('ipc-err','Не получилось узнать результат проверки. Жми «Проверить» ещё раз.');return;}
  if(st&&st.running){ipcShow(st);ipcTimer=setTimeout(ipcPoll,700);return;}
- $('ipc-go').disabled=false;$('ipc-go').textContent='Проверить';
- if(st&&st.verdict)ipcShow(st);
+ ipcBusy(false);
+ if(st&&st.verdict)ipcShow(st);else $('ipc-res').hidden=true;
 }
 $('ipc-go').onclick=async()=>{
- message('ipc-err','');clearTimeout(ipcTimer);
+ message('ipc-err','');clearTimeout(ipcTimer);ipcFails=0;
  try{await bridge('ipCheckStart',$('ipc-ip').value);}
- catch(e){message('ipc-err',errorText(e));return;}
- $('ipc-go').disabled=true;$('ipc-go').textContent='Проверяю…';ipcShow({running:true,stage:'Стучусь на сервер…'});ipcPoll();
+ catch(e){const t=errorText(e);if(!/Уже проверяю/.test(t)){message('ipc-err',t);return;}} // уже идёт — просто ждём её итог
+ ipcBusy(true);ipcShow({running:true,stage:'Стучусь на сервер…'});ipcPoll();
 };
 $('ipc-ip').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();if(!$('ipc-go').disabled)$('ipc-go').onclick();}};
 
