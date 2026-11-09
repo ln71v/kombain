@@ -474,8 +474,11 @@ $('bot-name').onclick=()=>{const n=$('bot-name').textContent.replace(/^@/,'').tr
 ['host','password','token','ipc-ip'].forEach(id=>{const inp=$(id),w=document.createElement('span');w.className='paste-wrap';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);
  const b=document.createElement('button');b.type='button';b.className='paste-btn';b.textContent='Вставить';b.tabIndex=-1;w.appendChild(b);
  b.onmousedown=e=>e.preventDefault();
- b.onclick=async()=>{let t='';try{t=await bridge('readClipboard');}catch(e){}t=String(t||'').trim();if(id!=='password')t=t.replace(/\s+/g,'');
-  if(!t){b.textContent='Буфер пуст';setTimeout(()=>b.textContent='Вставить',1500);inp.focus();return;}inp.value=t;t='';inp.focus();};});
+ b.onclick=async()=>{let t='',err='';
+  // Телефон и комп иногда отдают буфер не с первого раза — пробуем трижды, без второго нажатия.
+  for(let i=0;i<3&&!t;i++){if(i)await new Promise(r=>setTimeout(r,250));try{t=await bridge('readClipboard');err='';}catch(e){err=errorText(e);}t=String(t||'').trim();}
+  if(id!=='password')t=t.replace(/\s+/g,'');
+  if(!t){b.textContent=err?'Буфер занят':'Буфер пуст';setTimeout(()=>b.textContent='Вставить',1500);inp.focus();return;}inp.value=t;t='';inp.focus();};});
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(Number(b.dataset.go)));
 // Проверка IP прямо в окне: свой стук + узлы check-host в России. Зелёное — ставь, красное — меняй IP.
 $('go-ipc').onclick=()=>{show(13);$('ipc').scrollIntoView({block:'start'});$('ipc-ip').focus();};

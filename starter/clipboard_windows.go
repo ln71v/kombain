@@ -6,6 +6,7 @@ import (
 	"errors"
 	"regexp"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -23,7 +24,17 @@ var (
 const cfUnicodeText = 13
 
 func readClipboard() (string, error) {
-	if r, _, _ := openClipboard.Call(0); r == 0 {
+	// Сразу после «Копировать» Windows (журнал буфера, облачный буфер) держит буфер занятым
+	// долю секунды — поэтому раньше «Вставить» срабатывала только со второго нажатия. Ждём до ~1 с.
+	opened := false
+	for i := 0; i < 20; i++ {
+		if r, _, _ := openClipboard.Call(0); r != 0 {
+			opened = true
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !opened {
 		return "", errors.New("Буфер обмена занят. Попробуй ещё раз.")
 	}
 	defer closeClipboard.Call()
