@@ -38,14 +38,16 @@ func TestVerdict(t *testing.T) {
 		want string
 	}{
 		{selfOK, ruResult{6, 6}, "green"},
-		{selfOK, ruResult{3, 6}, "green"},
-		{selfOK, ruResult{0, 0}, "green"},  // check-host молчит — верим своему стуку
-		{selfOK, ruResult{1, 6}, "yellow"}, // похоже на VPN на устройстве
+		{selfOK, ruResult{2, 2}, "green"},
+		{selfOK, ruResult{5, 6}, "red"}, // хоть один узел не достучался — не брать
+		{selfOK, ruResult{1, 2}, "red"},
+		{selfOK, ruResult{0, 6}, "red"},
+		{selfOK, ruResult{0, 0}, "yellow"}, // check-host молчит — не проверить
 		{selfSilent, ruResult{6, 6}, "red"},
-		{selfFail, ruResult{4, 6}, "red"},
-		{selfFail, ruResult{0, 6}, "red"},
+		{selfFail, ruResult{6, 6}, "red"},
+		{selfFail, ruResult{1, 2}, "red"},
 		{selfFail, ruResult{0, 0}, "red"},
-		{selfRefused, ruResult{0, 6}, "yellow"},
+		{selfRefused, ruResult{6, 6}, "yellow"},
 	}
 	for _, c := range cases {
 		v := verdict("203.0.113.10:22", c.self, c.ru)
@@ -167,7 +169,7 @@ func TestIPCheckStartState(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	st := ipCheckState()
-	if st.Verdict != "green" || st.Address != addr {
+	if st.Verdict != "yellow" || st.Address != addr {
 		b, _ := json.Marshal(st)
 		t.Fatalf("%s", b)
 	}
