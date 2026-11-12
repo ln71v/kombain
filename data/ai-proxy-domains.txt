@@ -2,20 +2,14 @@
 # Точка в начале = домен и все его поддомены (.google.com = google.com и *.google.com).
 # Без точки = только этот адрес.
 #
-# ChatGPT (openai.com, chatgpt.com…) сюда НЕ входит: он идёт напрямую с сервера.
-# Через прокси у ChatGPT висла регистрация через «Войти с Google» (проверено 11.11.2026),
-# а напрямую с зарубежного сервера ChatGPT и так пускает.
+# ChatGPT и Claude сюда НЕ входят: они идут напрямую с сервера — с зарубежного IP и так пускают.
+# Через прокси у ChatGPT висла регистрация через «Войти с Google» (проверено 11.11.2026).
+# Claude работает через обычный VPN без прокси (Васька, 12.11.2026).
 # Мусор (аналитика, оплата) тоже не нужен — им страна не важна.
 
 # Google / Gemini
 .google.com
 .googleapis.com
-
-# Claude
-.claude.ai
-.claude.com
-.claudeusercontent.com
-.anthropic.com
 
 # Microsoft Copilot
 .microsoft.com
