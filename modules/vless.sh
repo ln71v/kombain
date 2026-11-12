@@ -142,6 +142,10 @@ vls_write_conf() {
            | if $warp and ($u | length) > 0 then [{type: "field", user: $u, outboundTag: "warp"}] else [] end))}
     }' >"$VLS_DIR/config.new.json"
   )
+  # Прокси для нейронок (модуль aiup): включён — вклеиваем выход и правила; настройка битая — стоп, ничего не меняем
+  if declare -F aup_apply >/dev/null && ! aup_apply "$VLS_DIR/config.new.json"; then
+    rm -f "${VLS_DIR:?}/config.new.json"; return 1
+  fi
   if ! "$VLS_BIN" run -test -config "$VLS_DIR/config.new.json" >/dev/null 2>&1; then
     err "Xray не принял новый конфиг:"; "$VLS_BIN" run -test -config "$VLS_DIR/config.new.json" 2>&1 | tail -5
     rm -f "${VLS_DIR:?}/config.new.json"; return 1

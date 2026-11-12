@@ -57,6 +57,8 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/modules/vless.sh"
 # shellcheck source=modules/warp.sh
 . "$KB_SRC/modules/warp.sh"
+# shellcheck source=modules/aiup.sh
+. "$KB_SRC/modules/aiup.sh"
 # shellcheck source=modules/tgusers.sh
 . "$KB_SRC/modules/tgusers.sh"
 # shellcheck source=modules/tgweb.sh
@@ -76,6 +78,7 @@ if [ "${1:-}" = "cli" ]; then
     warp)    warp_cli "$@"; exit $? ;;
     tgusers) tgu_cli "$@"; exit $? ;;
     tgweb)   tgw_cli "$@"; exit $? ;;
+    aiup)    aup_cli "$@"; exit $? ;;
     *) err "Неизвестный модуль: $mod"; exit 2 ;;
   esac
 fi

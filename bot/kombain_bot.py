@@ -466,7 +466,7 @@ def ai_screen(chat):
     info = aip_info()
     if not info.get("installed"):
         send(chat, AI_ABOUT)
-        send(chat, kb_text("text-intro"), inline([btn("📋 Погнали собирать", "safe:open")]))
+        send(chat, kb_text("text-intro"), inline([btn("📋 Погнали собирать", "safe:open")], AUP_ROW))
         return
     clients = info.get("clients") or []
     text = (f"🧠 <b>Прокси для нейронок</b> — стоит\n\n"
@@ -478,6 +478,7 @@ def ai_screen(chat):
         [btn("📊 Состояние", "aip:status"), btn("📜 Логи", "aip:logs")],
         [btn("🔄 Обновить список нейронок", "aip:upd")],
         [btn("♻️ Перезапустить", "aip:restart"), btn("🗑 Удалить", "aip:rm")],
+        AUP_ROW,
     ))
 
 
@@ -531,6 +532,129 @@ def ai_callback(chat, data):
     elif data in ("aip:rm:keep", "aip:rm:purge"):
         args = ["aiproxy", "remove"] + (["--purge"] if data.endswith("purge") else [])
         run_long(chat, "Удаляю…", lambda: send_pre(chat, kb(*args)[1], "🗑 Готово"))
+
+
+# ───────────────────────── Прокси для нейронок (купленный) ─────────────────────────
+AUP_ROW = [btn("🌍 Прокси для нейронок", "aup:menu")]
+aup_pending = {}   # chat -> строка прокси, которую проверили и ждут «Включить» (только в памяти)
+
+AUP_ABOUT = ("🌍 <b>Прокси для нейронок</b>\n\n"
+             "Купленный прокси нужной страны. Gemini и Copilot видят его страну, а не страну сервера — "
+             "даже если Google считает сервер российским. ChatGPT, Claude и всё остальное идут напрямую, как раньше.\n"
+             "Работает для устройств 🔑 VLESS.")
+
+AUP_HOWTO = ("📲 <b>На телефоне (Hiddify)</b>: режим «Россия» или весь трафик через VPN.\n"
+             "Если режим «по приложениям» — пусти в туннель не только Gemini, но и "
+             "<b>Google Services Framework</b>, иначе приложение Gemini скажет «страна не поддерживается».")
+
+
+def aup_verdict_text(r):
+    """Ответ проверки (JSON из Комбайна) — человеческими словами."""
+    v = r.get("verdict")
+    where = ", ".join(x for x in (r.get("country"), r.get("org")) if x)
+    lines = []
+    if r.get("ip"):
+        lines.append(f"Выход: <code>{esc(r['ip'])}</code>" + (f" ({esc(where)})" if where else ""))
+        lines.append(f"Google видит: <b>{esc(r.get('google') or 'не определил')}</b>")
+    head = {"ok": "✅ <b>Годится</b>", "unknown": "🟡 <b>Похоже, годится</b>"}.get(v, "❌ <b>Не годится</b>")
+    reason = r.get("reason") or "Проверка не ответила"
+    return head + ("" if v == "ok" else f"\n{esc(reason)}") + ("\n\n" + "\n".join(lines) if lines else "")
+
+
+def aup_screen(chat):
+    info = kb_json("aiup", "info")
+    if info.get("on"):
+        where = ", ".join(x for x in (info.get("country"), info.get("org")) if x)
+        st = (f"✅ <b>включён</b> — <code>{esc(info.get('address', ''))}:{esc(info.get('port', ''))}</code>"
+              + (f"\nСтрана: {esc(where)}" if where else "")
+              + (f", Google видит {esc(info['google'])}" if info.get("google") else "")
+              + (f"\nПроверен: {esc(info['checked'])}" if info.get("checked") else ""))
+        rows = [[btn("🔁 Вставить другой", "aup:put"), btn("🔍 Проверить", "aup:test")],
+                [btn("⏹ Выключить", "aup:off")]]
+    else:
+        st = "⬜ выключен"
+        rows = [[btn("➕ Вставить прокси", "aup:put")]]
+    warn_vls = "" if info.get("vless") else ("\n\n⚠️ VLESS на сервере не стоит — прокси заработает, "
+                                             "когда поставишь 🔑 VLESS.")
+    send(chat, f"{AUP_ABOUT}\n\nСейчас: {st}{warn_vls}", inline(*rows, [btn("◀️ Назад в Нейронки", "aup:ai")]))
+
+
+def aup_put(chat, text, msg_id):
+    """Пришла строка прокси: убрать её из чата, проверить, спросить «Включить?»."""
+    state.pop(chat, None)
+    delete(chat, msg_id)   # в строке логин и пароль — не держим в переписке
+    url = text.strip()
+
+    def job():
+        code, out = kb("aiup", "check", env={"KB_AIUP_URL": url}, timeout=120)
+        try:
+            r = json.loads(out.splitlines()[-1])
+        except Exception:
+            r = {"verdict": "bad", "reason": last_line(out, "Проверка не ответила")}
+        txt = "🔐 Сообщение со строкой удалил.\n\n" + aup_verdict_text(r)
+        if r.get("verdict") in ("ok", "unknown"):
+            aup_pending[chat] = url
+            send(chat, txt + "\n\nВключить для нейронок?",
+                 inline([btn("✅ Включить", "aup:on")], [btn("✖️ Не надо", "aup:menu")]))
+        else:
+            send(chat, txt, inline([btn("🔁 Вставить другой", "aup:put")], [btn("◀️ Назад", "aup:menu")]))
+
+    run_long(chat, "Проверяю прокси… до минуты.", job)
+
+
+def aup_callback(chat, data):
+    if data == "aup:menu":
+        aup_pending.pop(chat, None)
+        aup_screen(chat)
+    elif data == "aup:ai":
+        ai_screen(chat)
+    elif data == "aup:put":
+        state[chat] = {"step": "aup_put"}
+        send(chat, "Вставь строку прокси из кабинета продавца:\n"
+                   "<code>socks5://логин:пароль@IP:порт</code>\n"
+                   "(у px6 — поле «Url»; можно и <code>IP:порт:логин:пароль</code>)\n\n"
+                   "Нужен <b>индивидуальный</b> прокси (не общий), SOCKS5 или HTTP, страна, где работает Gemini.\n"
+                   "Сообщение со строкой сразу удалю — в ней пароль.", inline(CANCEL))
+    elif data == "aup:on":
+        url = aup_pending.pop(chat, None)
+        if not url:
+            send(chat, "⚠️ Строка прокси потерялась (бот перезапускался?) — вставь заново.",
+                 inline([btn("➕ Вставить прокси", "aup:put")]))
+            return
+
+        def job():
+            code, out = kb("aiup", "set", env={"KB_AIUP_URL": url}, timeout=180)
+            if code != 0:
+                body = "\n".join(l for l in out.splitlines() if not l.startswith("{"))
+                send_pre(chat, body[-1500:], "❌ Не включилось, всё осталось как было:",
+                         inline([btn("🔁 Вставить другой", "aup:put")], [btn("◀️ Назад", "aup:menu")]))
+                return
+            send(chat, "✅ <b>Прокси для нейронок включён.</b>\n\n" + AUP_HOWTO)
+            aup_screen(chat)
+
+        run_long(chat, "Включаю: проверяю прокси и перезапускаю VLESS…", job)
+    elif data == "aup:test":
+        def job():
+            code, out = kb("aiup", "test", timeout=120)
+            try:
+                r = json.loads(out.splitlines()[-1])
+            except Exception:
+                r = {"verdict": "bad", "reason": last_line(out, "Проверка не ответила")}
+            extra = "\n".join(l.lstrip("✔✖! ") for l in out.splitlines() if l.startswith(("✔ Xray", "✖ Xray", "! VLESS")))
+            send(chat, aup_verdict_text(r) + (f"\n\n{esc(extra)}" if extra else ""),
+                 inline([btn("◀️ Назад", "aup:menu")]))
+        run_long(chat, "Проверяю прокси…", job)
+    elif data == "aup:off":
+        send(chat, "⏹ Выключить прокси для нейронок? Нейронки пойдут с IP сервера, "
+                   "строку прокси я забуду (чтобы включить снова — вставишь её заново).",
+             inline([btn("Да, выключить", "aup:offok")], [btn("◀️ Назад", "aup:menu")]))
+    elif data == "aup:offok":
+        code, out = kb("aiup", "off", timeout=90)
+        if code != 0:
+            send_pre(chat, out, "❌ Не выключилось:")
+            return
+        send(chat, "⏹ " + esc(last_line(out)))
+        aup_screen(chat)
 
 
 def safe_callback(chat, data):
@@ -1691,6 +1815,8 @@ def on_message(m):
         safe_put(chat, step[4:], text, m["message_id"])
     elif step == "aip_add":
         ai_add_client(chat, text)
+    elif step == "aup_put":
+        aup_put(chat, text, m["message_id"])
     elif step == "awg_add":
         awg_add(chat, text)
     elif step == "vls_add":
@@ -1742,6 +1868,8 @@ def on_callback(q):
         safe_callback(chat, data)
     elif data.startswith("aip:"):
         ai_callback(chat, data)
+    elif data.startswith("aup:"):
+        aup_callback(chat, data)
     elif data.startswith("awg:"):
         awg_callback(chat, data)
     elif data.startswith("vls:"):
