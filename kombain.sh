@@ -9,6 +9,14 @@ set -uo pipefail
 KB_REPO="ln71v/kombain"
 KB_BRANCH="main"
 KB_SRC="/opt/kombain/src"
+# Тестовый сервер может жить на своей ветке: имя ветки в /opt/kombain/branch
+# (например, beta). Нет файла — main, как у всех.
+KB_BRANCH_FILE="/opt/kombain/branch"
+if [ -r "$KB_BRANCH_FILE" ]; then
+  _b=$(tr -dc 'A-Za-z0-9._/-' < "$KB_BRANCH_FILE")
+  [ -n "$_b" ] && KB_BRANCH="$_b"
+  unset _b
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Запусти от root (зайди как root или добавь sudo в начало команды)." >&2
@@ -21,7 +29,8 @@ kb_fetch() {
   local tmp
   tmp=$(mktemp -d)
   if ! curl -fsSL "https://codeload.github.com/$KB_REPO/tar.gz/refs/heads/$KB_BRANCH" | tar -xz -C "$tmp"; then
-    echo "Не смог скачать Комбайн с GitHub. Проверь интернет на сервере." >&2
+    echo "Не смог скачать Комбайн с GitHub (ветка $KB_BRANCH). Проверь интернет на сервере." >&2
+    [ "$KB_BRANCH" != "main" ] && echo "Если ветку удалили — вернись на main: rm $KB_BRANCH_FILE" >&2
     rm -rf "$tmp"
     exit 1
   fi

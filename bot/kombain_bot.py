@@ -40,9 +40,18 @@ API = f"https://api.telegram.org/bot{TOKEN}"
 def read_version():
     try:
         with open(os.path.join(KB_SRC, "VERSION")) as f:
-            return "v" + f.read().strip()
+            v = "v" + f.read().strip()
     except OSError:
-        return "v?"
+        v = "v?"
+    # Тестовая ветка (файл /opt/kombain/branch) — видно прямо в версии
+    try:
+        with open("/opt/kombain/branch") as f:
+            b = "".join(ch for ch in f.read() if ch.isalnum() or ch in "._/-")
+        if b and b != "main":
+            v += f" ({b})"
+    except OSError:
+        pass
+    return v
 
 
 VERSION = read_version()
