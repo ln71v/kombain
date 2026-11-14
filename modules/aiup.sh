@@ -141,6 +141,21 @@ aup_apply() {
     rm -f "$tmp"; err "Не смог вклеить прокси в конфиг Xray."; return 1
   fi
   mv -f "$tmp" "$f"
+  # Запомнить, с каким списком доменов собран конфиг: после обновления Комбайна aup_sync
+  # сравнит и пересоберёт Xray, если список поменялся.
+  ( umask 077; aup_domains_sum >"$AUP_DIR/domains.sum" )
+}
+
+aup_domains_sum() { aup_domains_json | sha1sum | cut -c1-40; }
+
+# После обновления Комбайна: список доменов прокси поменялся — пересобрать Xray.
+aup_sync() {
+  aup_on || { ok "Прокси для нейронок выключен — пересобирать нечего"; return 0; }
+  if [ "$(aup_domains_sum)" = "$(cat "$AUP_DIR/domains.sum" 2>/dev/null)" ]; then
+    ok "Список доменов прокси не менялся"; return 0
+  fi
+  step "Список доменов прокси обновился — пересобираю Xray"
+  aup_rebuild
 }
 
 # Пересобрать VLESS с текущей настройкой (если VLESS стоит)
@@ -229,6 +244,7 @@ aup_cli() {
     test)  aup_test 2>&1 ;;
     off)   aup_off ;;
     domains) aup_domains_json | jq -r '.[]' ;;
+    sync)  aup_sync ;;
     *) err "Неизвестная команда: $cmd"; return 2 ;;
   esac
 }

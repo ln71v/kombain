@@ -548,8 +548,8 @@ AUP_ROW = [btn("🌍 Прокси для нейронок", "aup:menu")]
 aup_pending = {}   # chat -> строка прокси, которую проверили и ждут «Включить» (только в памяти)
 
 AUP_ABOUT = ("🌍 <b>Прокси для нейронок</b>\n\n"
-             "Купленный прокси нужной страны. Gemini и Copilot видят его страну, а не страну сервера — "
-             "даже если Google считает сервер российским. ChatGPT, Claude и всё остальное идут напрямую, как раньше.\n"
+             "Купленный прокси нужной страны. Gemini, Copilot, ChatGPT и Claude видят его страну, а не страну сервера — "
+             "даже если сервер считают российским. Всё остальное идёт напрямую, как раньше.\n"
              "Работает для устройств 🔑 VLESS.")
 
 AUP_HOWTO = ("📲 <b>На телефоне (Hiddify)</b>: режим «Россия» или весь трафик через VPN.\n"
@@ -1768,10 +1768,22 @@ def upd_report():
         os.remove(UPD_FLAG)
     except (OSError, ValueError):
         return
+    # Новый список доменов прокси для нейронок — сразу в Xray (на этом сервере, не на выбранном)
+    note = ""
+    try:
+        r = subprocess.run([KB, "cli", "aiup", "sync"], capture_output=True, text=True, timeout=180,
+                           stdin=subprocess.DEVNULL,
+                           env={k: v for k, v in os.environ.items() if k != "BOT_TOKEN"})
+        if r.returncode != 0:
+            note = "\n\n⚠️ Прокси для нейронок: новый список доменов не применился. Открой 🧠 Нейронки → 🌍 Прокси для нейронок → «🔍 Проверить»."
+        elif "пересобираю" in (r.stdout + r.stderr):
+            note = "\n\n🌍 Прокси для нейронок: применён новый список доменов."
+    except (OSError, subprocess.SubprocessError):
+        pass
     if old == VERSION:
-        send(int(chat), f"✅ Готово. Версия та же — <b>{VERSION}</b>, обновлять было нечего.", MAIN_KB)
+        send(int(chat), f"✅ Готово. Версия та же — <b>{VERSION}</b>, обновлять было нечего.{note}", MAIN_KB)
     else:
-        send(int(chat), f"✅ Обновился: <b>{old} → {VERSION}</b>.", MAIN_KB)
+        send(int(chat), f"✅ Обновился: <b>{old} → {VERSION}</b>.{note}", MAIN_KB)
 
 
 HELP = (f"🤖 <b>Пульт Комбайна</b> · {VERSION}\n\n"
