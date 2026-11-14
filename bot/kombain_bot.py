@@ -1764,7 +1764,7 @@ def upd_report():
     """После перезапуска: сказать, что обновились, и с какой версии на какую."""
     try:
         with open(UPD_FLAG) as f:
-            chat, old = f.read().split()
+            chat, old = f.read().strip().split(None, 1)   # в версии бывает пробел: «v0.15.3.1 (beta)»
         os.remove(UPD_FLAG)
     except (OSError, ValueError):
         return
