@@ -200,7 +200,8 @@ public class MainActivity extends Activity {
                         return reply(null, null);
                     }
                 case "updateInstall":
-                    updater.install();
+                    // ["view"] — поставить «по-старому», обычным окном установки (долгое нажатие на «Обновить»).
+                    updater.install(args != null && args.contains("\"view\""));
                     return reply(null, null);
                 default:
                     return Kbcore.call(name, args);

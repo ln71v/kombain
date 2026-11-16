@@ -52,6 +52,8 @@ pre{height:140px}
 @keyframes kbpulse{0%,100%{box-shadow:0 6px 18px rgba(245,124,0,.45)}50%{box-shadow:0 6px 26px rgba(245,124,0,.85),0 0 0 4px rgba(245,124,0,.25)}}
 #kb-update-text{font-weight:700;font-size:16px}
 #kb-update button{align-self:stretch;min-height:48px;background:#FFF!important;color:#C25E00!important;font-size:16px!important}
+#kb-update #kb-update-gh{background:transparent!important;color:#FFF!important;border:1.5px solid #FFF!important;font-size:15px!important}
+#kb-update-btn{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #kb-update small{color:#FFF;opacity:.9;font-size:12px;line-height:1.4}
 
 /* Где взять сервер: хостер — строка, метки под ним; проверка IP — поле над кнопкой. */

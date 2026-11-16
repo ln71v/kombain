@@ -5,6 +5,7 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.PackageInstaller;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.Settings;
 
 import org.json.JSONObject;
@@ -35,6 +36,9 @@ final class Updater {
     private volatile String state = "none";   // none | checking | available | downloading | installing | permission | error
     private volatile String message = "";
     private volatile String remoteSum = "";
+    private volatile long installingSince = 0;
+    // Через сколько «установка молчит» — показываем «Не ставится? Скачать с GitHub».
+    private static final long SLOW_MS = 60_000;
 
     Updater(Activity act, String channel) {
         this.act = act;
@@ -47,6 +51,9 @@ final class Updater {
             JSONObject o = new JSONObject();
             o.put("state", state);
             o.put("message", message);
+            // Android так и не ответил (бывает на Xiaomi) — окно предложит скачать APK с GitHub.
+            o.put("slow", "installing".equals(state) && installingSince > 0
+                    && System.currentTimeMillis() - installingSince > SLOW_MS);
             return o.toString();
         } catch (Exception e) {
             return "{}";
@@ -64,13 +71,21 @@ final class Updater {
                 String mine = sha256(new File(act.getPackageCodePath()));
                 remoteSum = sum;
                 state = sum.equals(mine) ? "none" : "available";
+                // Версия свежая — прошлое скачанное обновление больше не нужно.
+                //noinspection ResultOfMethodCallIgnored
+                if ("none".equals(state)) ApkProvider.file(act).delete();
             } catch (Exception e) {
                 state = "none"; // нет связи с GitHub — просто молчим
             }
         }).start();
     }
 
-    void install() {
+    /**
+     * Скачать и поставить. Обычно — через PackageInstaller (Android сам спросит «Обновить?»).
+     * Xiaomi/Redmi/POCO режут такую установку молча — им открываем APK обычным окном установки.
+     * viaView — то же «по-старому» на любом телефоне (долгое нажатие на «Обновить»), для проверки.
+     */
+    void install(boolean viaView) {
         if ("downloading".equals(state)) return;
         if (!act.getPackageManager().canRequestPackageInstalls()) {
             state = "permission";
@@ -83,14 +98,26 @@ final class Updater {
             });
             return;
         }
+        final boolean view = viaView || isXiaomi();
         state = "downloading";
         message = "";
+        installingSince = 0;
         new Thread(() -> {
-            File apk = new File(act.getCacheDir(), "update.apk");
+            File apk = ApkProvider.file(act);
+            boolean keep = false;
             try {
+                File dir = apk.getParentFile();
+                if (dir != null && !dir.isDirectory() && !dir.mkdirs()) throw new Exception("no dir");
+                //noinspection ResultOfMethodCallIgnored
+                apk.delete();
                 download(base + "kombain-android.apk", apk);
                 if (remoteSum.isEmpty() || !remoteSum.equals(sha256(apk))) {
                     fail("Файл скачался битым. Попробуй ещё раз.");
+                    return;
+                }
+                if (view) {
+                    keep = true; // окно установки читает файл само, позже — не удаляем
+                    openInstaller();
                     return;
                 }
                 PackageInstaller pi = act.getPackageManager().getPackageInstaller();
@@ -110,14 +137,40 @@ final class Updater {
                             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
                     s.commit(pend.getIntentSender());
                 }
-                state = "installing";
+                installing();
             } catch (Exception e) {
                 fail("Не получилось скачать обновление. Проверь интернет и попробуй ещё раз.");
             } finally {
                 //noinspection ResultOfMethodCallIgnored
-                apk.delete();
+                if (!keep) apk.delete();
             }
         }).start();
+    }
+
+    private void installing() {
+        installingSince = System.currentTimeMillis();
+        state = "installing";
+    }
+
+    /** Установка «по-старому»: обычное окно установки Android с нашим файлом. Ответа от него не бывает. */
+    private void openInstaller() {
+        act.runOnUiThread(() -> {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(ApkProvider.URI, ApkProvider.MIME)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                act.startActivity(i);
+                installing();
+            } catch (Exception e) {
+                fail("Окно установки не открылось. Скачай новую версию с GitHub.");
+            }
+        });
+    }
+
+    /** Xiaomi, Redmi, POCO (MIUI/HyperOS): установка через PackageInstaller-сессию у них молчит. */
+    static boolean isXiaomi() {
+        String m = (Build.MANUFACTURER + " " + Build.BRAND).toLowerCase(Locale.ROOT);
+        return m.contains("xiaomi") || m.contains("redmi") || m.contains("poco");
     }
 
     /** Ответ Android на установку: попросить человека подтвердить или показать ошибку. */

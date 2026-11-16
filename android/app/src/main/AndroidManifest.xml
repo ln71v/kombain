@@ -38,5 +38,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Скачанное обновление — окну установки Android (Xiaomi ставит только так). Наружу закрыт. -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="io.github.ln71v.kombain.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

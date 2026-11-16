@@ -46,12 +46,29 @@
     box.id = 'kb-update';
     box.hidden = true;
     box.innerHTML = '<div id="kb-update-text"></div><button type="button" class="primary" id="kb-update-btn">Обновить</button>' +
+      '<button type="button" class="secondary" id="kb-update-gh" hidden>Не ставится? Скачать с GitHub ↗</button>' +
       '<small>Android спросит «Обновить приложение?» — жми «Обновить». Если выскочит окно Play Защиты: ' +
       '«Подробнее» → «Всё равно установить». Не нажимается (бывает на магнитолах) — Play Маркет → аватарка → ' +
       'Play Защита → шестерёнка → выключи «Проверять приложения», обнови и включи обратно.</small>';
     first.insertBefore(box, first.firstChild);
-    el('kb-update-btn').onclick = function () {
-      call('updateInstall', []).then(watchUpdate).catch(function (e) { setUpdate(e.message, true); });
+    // Долгое нажатие на «Обновить» — поставить «по-старому», обычным окном установки
+    // (так ставится на Xiaomi; здесь — чтобы проверить этот путь на любом телефоне).
+    var btn = el('kb-update-btn'), hold = null, held = false;
+    function start(how) {
+      el('kb-update-gh').hidden = true;
+      call('updateInstall', how ? [how] : []).then(watchUpdate).catch(function (e) { setUpdate(e.message, true); });
+    }
+    btn.addEventListener('pointerdown', function () {
+      held = false;
+      clearTimeout(hold);
+      hold = setTimeout(function () { held = true; start('view'); }, 1200);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { btn.addEventListener(t, function () { clearTimeout(hold); }); });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    btn.onclick = function () { if (held) { held = false; return; } start(''); };
+    // Android молчит дольше минуты (бывает на Xiaomi) — APK можно скачать и поставить руками.
+    el('kb-update-gh').onclick = function () {
+      window.openLink('https://github.com/ln71v/kombain/releases').catch(function (e) { setUpdate(e.message, true); });
     };
     return box;
   }
@@ -73,9 +90,15 @@
         if (s.state === 'available') { setUpdate('🔔 Вышла новая версия Комбайна — жми «Обновить», файл качать не надо.', true); watching = false; return; }
         if (s.state === 'downloading') setUpdate('Качаю новую версию…', false);
         // Ждём ответа Android: «Отмена» вернёт available — кнопка появится снова.
-        if (s.state === 'installing') { setUpdate('Открыл установку — жми «Обновить».', false); if (++tries < 400) setTimeout(tick, 1500); else watching = false; return; }
+        if (s.state === 'installing') {
+          setUpdate(s.slow ? 'Открыл установку — жми «Обновить» или «Установить». Ничего не происходит — скачай новую версию с GitHub и открой файл.'
+            : 'Открыл установку — жми «Обновить» или «Установить».', false);
+          if (s.slow) el('kb-update-gh').hidden = false;
+          if (++tries < 400) setTimeout(tick, 1500); else watching = false;
+          return;
+        }
         if (s.state === 'permission') { setUpdate('Разреши Комбайну ставить обновления: в открывшемся окне включи переключатель, вернись и жми «Обновить» ещё раз.', true); watching = false; return; }
-        if (s.state === 'error') { setUpdate(s.message || 'Не получилось обновиться. Попробуй позже.', true); watching = false; return; }
+        if (s.state === 'error') { setUpdate(s.message || 'Не получилось обновиться. Попробуй позже.', true); el('kb-update-gh').hidden = false; watching = false; return; }
         if (s.state === 'none' && tries > 0) { watching = false; return; }
         if (++tries < 120) setTimeout(tick, 1500); else watching = false;
       }).catch(function () { watching = false; });
