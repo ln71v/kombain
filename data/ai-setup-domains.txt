@@ -1,0 +1,22 @@
+# Список для установки ai-setup. Без ведущей точки совпадает только указанный адрес.
+gemini.google.com
+accounts.google.com
+ogs.google.com
+generativelanguage.googleapis.com
+proactivebackend-pa.googleapis.com
+robinfrontend-pa.googleapis.com
+copilot.com
+copilot.microsoft.com
+copilot.cloud.microsoft
+sydney.bing.com
+edgeservices.bing.com
+.claude.ai
+.claude.com
+.claudeusercontent.com
+.anthropic.com
+.chatgpt.com
+.openai.com
+.oaistatic.com
+.oaiusercontent.com
+.oaistatsig.com
+.openaimerge.com

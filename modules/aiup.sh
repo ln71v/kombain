@@ -24,7 +24,9 @@ aup_on() { [ -e "$AUP_ON" ]; }
 
 # Домены из файла → формат Xray: «.x.com» → domain:x.com, «x.com» → full:x.com
 aup_domains_json() {
-  grep -v '^[[:space:]]*\(#\|$\)' "$AUP_DOMAINS" 2>/dev/null | tr -d '\r ' |
+  local list="$AUP_DOMAINS"
+  [ ! -f "$AUP_DIR/domains.txt" ] || list="$AUP_DIR/domains.txt"
+  grep -v '^[[:space:]]*\(#\|$\)' "$list" 2>/dev/null | tr -d '\r ' |
     awk '/^\./{print "domain:" substr($0, 2); next} {print "full:" $0}' | jq -R . | jq -sc .
 }
 
@@ -77,7 +79,7 @@ aup_curl() {
   {
     printf 'proxy = "%s://%s:%s"\n' "$scheme" "$host" "$port"
     [ -n "$user" ] && printf 'proxy-user = "%s:%s"\n' "$(esc_cfg "$user")" "$(esc_cfg "$pass")"
-  } | curl -s --connect-timeout 10 --max-time 25 -K - "$@"
+  } | curl -q --noproxy '' -s --connect-timeout 10 --max-time 25 -K - "$@"
 }
 
 # Проверка прокси. Печатает понятные строки, последней — JSON для бота:
@@ -165,20 +167,29 @@ aup_rebuild() {
 }
 
 aup_set() {
-  local raw="${KB_AIUP_URL:-${1:-}}" j res v old="" was_on=0
+  local raw="${KB_AIUP_URL:-${1:-}}" j
   [ -n "$raw" ] || { err "Пришли строку прокси, например socks5://логин:пароль@1.2.3.4:8000"; return 1; }
   j=$(aup_parse "$raw") || { err "Не понял строку прокси. Нужно так: socks5://логин:пароль@IP:порт"; return 1; }
+  aup_set_config "$j"
+}
+
+aup_set_config() {
+  local j="$1" res v old="" was_on=0 tmp
   step "Проверяю прокси"
-  res=$(aup_check "$j"); printf '%s\n' "$res" | sed '$d'
-  v=$(tail -1 <<<"$res" | jq -r .verdict)
-  [ "$v" = bad ] && { tail -1 <<<"$res"; return 1; }
-  install -d -m 0700 "$AUP_DIR"
+  res=$(aup_check "$j") || return 1
+  printf '%s\n' "$res" | sed '$d'
+  v=$(tail -1 <<<"$res" | jq -er '.verdict | select(. == "ok" or . == "unknown" or . == "bad")') || return 1
+  [ "$v" != bad ] || { tail -1 <<<"$res"; return 1; }
+  install -d -m 0700 "$AUP_DIR" || return 1
   [ -r "$AUP_FILE" ] && old=$(cat "$AUP_FILE"); aup_on && was_on=1
-  ( umask 077
-    jq -c --argjson r "$(tail -1 <<<"$res")" --arg t "$(TZ=Europe/Moscow date '+%d.%m %H:%M МСК')" \
+  tmp=$(mktemp "$AUP_DIR/proxy.XXXXXX") || return 1
+  if ! jq -c --argjson r "$(tail -1 <<<"$res")" --arg t "$(TZ=Europe/Moscow date '+%d.%m %H:%M МСК')" \
       '. + {ip: $r.ip, country: $r.country, org: $r.org, google: $r.google, verdict: $r.verdict, checked: $t}' \
-      <<<"$j" >"$AUP_FILE" )
-  touch "$AUP_ON"
+      <<<"$j" >"$tmp" || ! touch "$AUP_ON" || ! mv -f "$tmp" "$AUP_FILE"; then
+    rm -f "$tmp"
+    [ "$was_on" = 1 ] || rm -f "$AUP_ON"
+    return 1
+  fi
   if ! aup_rebuild; then
     err "Xray с прокси не поднялся — вернул как было."
     if [ -n "$old" ]; then ( umask 077; printf '%s\n' "$old" >"$AUP_FILE" ); else rm -f "$AUP_FILE"; fi
@@ -230,6 +241,79 @@ aup_info() {
     jq -nc --argjson vl "$vless" '{on: false, vless: $vl}'
   fi
 }
+
+# Быстрая установка VLESS + купленный прокси на отдельном VPS.
+aup_setup() (
+  umask 077
+  local endpoint="${1:-}" proxy user pass sni candidate version link
+  local -a sni_candidates=(www.apple.com www.samsung.com www.yahoo.com)
+  [ -z "${KB_VLS_SNI:-}" ] || sni_candidates=("$KB_VLS_SNI")
+  if [ "$#" -gt 1 ]; then
+    err "Использование: kombain ai-setup [socks5://IP:порт или http://IP:порт]"
+    return 2
+  fi
+  check_os
+  if ! vls_installed && [ "$(vls_port443)" != free ]; then
+    err "TCP 443 занят. Для установки нужен свободный порт."
+    return 1
+  fi
+  if vls_installed && [ ! -f "$AUP_DIR/domains.txt" ]; then
+    err "VLESS уже настроен. Для него используй kombain cli aiup set."
+    return 1
+  fi
+
+  install -d -m 0700 "$AUP_DIR" || return 1
+  exec 9>"$AUP_DIR/setup.lock" || return 1
+  flock -n 9 || { err "Установка уже идёт."; return 1; }
+  ensure_pkgs curl jq || return 1
+
+  if ! vls_installed; then
+    for candidate in "${sni_candidates[@]}"; do
+      if version=$(curl -q --noproxy '*' --tlsv1.3 --http2 -sS -o /dev/null \
+          -w '%{http_version}' --connect-timeout 5 --max-time 10 "https://$candidate/") &&
+          [ "$version" = 2 ]; then
+        sni="$candidate"
+        break
+      fi
+    done
+    [ -n "${sni:-}" ] || { err "VPS не смог подключиться ни к одному TLS-адресу для REALITY."; return 1; }
+  fi
+
+  if [ ! -f "$AUP_DIR/domains.txt" ]; then
+    install -m 0600 "$KB_SRC/data/ai-setup-domains.txt" "$AUP_DIR/domains.txt" || return 1
+  fi
+  if [ -n "$endpoint" ] || ! aup_on || [ ! -s "$AUP_FILE" ]; then
+    [ -n "$endpoint" ] || endpoint=$(ask "Адрес прокси, например 1.2.3.4:8000 или http://1.2.3.4:8000")
+    if [[ "$endpoint" == *@* ]] || ! proxy=$(aup_parse "$endpoint"); then
+      err "Укажи только адрес прокси и порт. Логин и пароль вводятся отдельно."
+      return 1
+    fi
+    user=$(ask "Логин прокси")
+    pass=$(ask_secret "Пароль прокси")
+    if [ -z "$user" ] || [ -z "$pass" ] || [[ "$user" == *:* ]]; then
+      err "Нужны логин без двоеточия и пароль."
+      return 1
+    fi
+    proxy=$(printf '%s\0%s\0%s' "$proxy" "$user" "$pass" |
+      jq -Rsc 'split("\u0000") as $p | ($p[0] | fromjson) + {user:$p[1],pass:$p[2]}') || return 1
+    unset user pass
+    aup_set_config "$proxy" || return 1
+    unset proxy
+  fi
+
+  if ! vls_installed; then
+    KB_VLS_SNI="$sni" vls_install_core || return 1
+  elif ! vls_running; then
+    vls_get_bin && vls_unit && systemctl enable kombain-xray && vls_restart || return 1
+  fi
+  if ! grep -qx ru-phone <<<"$(vls_clients)"; then
+    vls_add_client ru-phone || return 1
+  fi
+  link=$(vls_link ru-phone) || return 1
+  printf '%s\n' "$link" >"$AUP_DIR/phone.url" || return 1
+  ok "Профиль сохранён: $AUP_DIR/phone.url"
+  printf '%s\n' "$link"
+)
 
 # kombain cli aiup <команда>   (строку прокси лучше передавать в KB_AIUP_URL, а не аргументом)
 aup_cli() {

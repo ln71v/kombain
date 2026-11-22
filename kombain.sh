@@ -18,33 +18,64 @@ if [ -r "$KB_BRANCH_FILE" ]; then
   unset _b
 fi
 
+KB_SELECTED_BRANCH=""
+if [ "${1:-}" = "--branch" ]; then
+  KB_SELECTED_BRANCH="${2:-}"
+  if [[ ! "$KB_SELECTED_BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "Укажи имя ветки после --branch." >&2
+    exit 2
+  fi
+  KB_BRANCH="$KB_SELECTED_BRANCH"
+  shift 2
+fi
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Запусти от root (зайди как root или добавь sudo в начало команды)." >&2
   exit 1
 fi
 
 # Скачиваем свежую версию в /opt/kombain/src, если запущены не оттуда
-kb_fetch() {
+kb_fetch() (
+  mkdir -p "$(dirname "$KB_SRC")" || return 1
+  exec 8>"$(dirname "$KB_SRC")/source.lock" || return 1
+  flock -n 8 || { echo "Комбайн уже скачивается." >&2; return 1; }
   command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq curl >/dev/null; }
   local tmp
-  tmp=$(mktemp -d)
+  tmp=$(mktemp -d) || return 1
   if ! curl -fsSL "https://codeload.github.com/$KB_REPO/tar.gz/refs/heads/$KB_BRANCH" | tar -xz -C "$tmp"; then
     echo "Не смог скачать Комбайн с GitHub (ветка $KB_BRANCH). Проверь интернет на сервере." >&2
     [ "$KB_BRANCH" != "main" ] && echo "Если ветку удалили — вернись на main: rm $KB_BRANCH_FILE" >&2
     rm -rf "$tmp"
     exit 1
   fi
-  rm -rf "$KB_SRC"
-  mkdir -p "$(dirname "$KB_SRC")"
-  mv "$tmp"/kombain-* "$KB_SRC"
-  rm -rf "$tmp"
-  chmod +x "$KB_SRC/kombain.sh"
-  ln -sf "$KB_SRC/kombain.sh" /usr/local/bin/kombain
-}
+  local entries=("$tmp"/kombain-*) previous="$KB_SRC.previous"
+  if [ "${#entries[@]}" -ne 1 ] || [ ! -s "${entries[0]}/kombain.sh" ] ||
+     [ ! -s "${entries[0]}/lib/common.sh" ]; then
+    echo "Архив Комбайна неполный. Установленные файлы оставлены на месте." >&2
+    rm -rf "$tmp"
+    return 1
+  fi
+  rm -rf "$previous" || { rm -rf "$tmp"; return 1; }
+  if [ -e "$KB_SRC" ] && ! mv "$KB_SRC" "$previous"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! mv "${entries[0]}" "$KB_SRC" ||
+     ! chmod +x "$KB_SRC/kombain.sh" ||
+     ! ln -sfn "$KB_SRC/kombain.sh" /usr/local/bin/kombain; then
+    rm -rf "$KB_SRC" "$tmp"
+    if [ -e "$previous" ]; then mv "$previous" "$KB_SRC"; fi
+    return 1
+  fi
+  rm -rf "$previous" "$tmp"
+)
 
 SELF_DIR=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd)
-if [ "${1:-}" = "--update" ] || [ ! -f "$SELF_DIR/lib/common.sh" ]; then
-  kb_fetch
+if [ -n "$KB_SELECTED_BRANCH" ] || [ "${1:-}" = "--update" ] || [ ! -f "$SELF_DIR/lib/common.sh" ]; then
+  kb_fetch || exit 1
+  if [ -n "$KB_SELECTED_BRANCH" ]; then
+    printf '%s\n' "$KB_SELECTED_BRANCH" >"$KB_BRANCH_FILE" || exit 1
+  fi
   [ "${1:-}" = "--update" ] && shift
   exec "$KB_SRC/kombain.sh" "$@"
 fi
@@ -72,6 +103,12 @@ KB_SRC="$SELF_DIR"
 . "$KB_SRC/modules/tgusers.sh"
 # shellcheck source=modules/tgweb.sh
 . "$KB_SRC/modules/tgweb.sh"
+
+if [ "${1:-}" = "ai-setup" ]; then
+  shift
+  aup_setup "$@"
+  exit $?
+fi
 
 # Режим для бота: kombain cli <модуль> <команда> [аргументы]
 if [ "${1:-}" = "cli" ]; then
