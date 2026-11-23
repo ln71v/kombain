@@ -9,11 +9,19 @@
 
 # Claude
 .claude.ai
+.claude.com
+.claudeusercontent.com
 .anthropic.com
 
 # Microsoft Copilot
 .microsoft.com
 .office.com
+.copilot.com
+copilot.cloud.microsoft
+sydney.bing.com
+edgeservices.bing.com
+login.live.com
+login.microsoftonline.com
 
 # OpenAI / ChatGPT
 .openai.com
@@ -24,11 +32,12 @@
 .openaimerge.com
 .workos.com
 .workoscdn.com
-workos.imgix.net
-challenges.cloudflare.com
+.workos.imgix.net
+.challenges.cloudflare.com
 .sendgrid.net
 .intercom.io
 .intercomcdn.com
-js.stripe.com
+.js.stripe.com
 .ingest.sentry.io
-rum.browser-intake-datadoghq.com
+.rum.browser-intake-datadoghq.com
+.humb.apple.com
