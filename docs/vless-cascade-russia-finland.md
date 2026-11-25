@@ -60,7 +60,7 @@ flowchart TD
     "security": "reality",
     "realitySettings": {
       "serverName": "www.yahoo.com",
-      "fingerprint": "firefox",
+      "fingerprint": "chrome",
       "publicKey": "<FI_REALITY_PUBLIC_KEY>",
       "shortId": "<FI_SHORT_ID>"
     }
@@ -124,3 +124,7 @@ journalctl -u kombain-xray --since "5 minutes ago" --no-pager
 - [Правила прокси для нейросетей](https://github.com/ln71v/kombain/blob/aiup/modules/aiup.sh#L118-L150)
 
 - [Порты Комбайна](https://github.com/ln71v/kombain/blob/main/docs/DEV-PORTS.md)
+
+## REALITY — диагностика TLS-отпечатка
+
+Для новых каскадов начинайте с `fingerprint: "chrome"` в исходящем REALITY. В профиле VLESS этому соответствует `fp=chrome`. На маршруте RU → Нидерланды с Xray 26.2.6 на RU и 26.11.9 на NL профиль с `firefox` получил `REALITY: received real certificate`, хотя обычный TLS через nginx проходил. Смена отпечатка на `chrome` при тех же ключах и SNI дала выход `78.17.135.82`. На Keenetic проверен тот же выход через SOCKS5 `127.0.0.1:1087`, клиент `ru-nl`. Для других серверов это первая проверка при аналогичном сбое. Причину их прежних сбоев отдельно не подтверждали.
